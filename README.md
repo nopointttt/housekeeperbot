@@ -109,22 +109,21 @@ LOG_LEVEL=INFO
 
 ## 🚀 Деплой через GitHub
 
-### Быстрый деплой на Railway.app (Рекомендуется)
+### Быстрый деплой на Render.com (Рекомендуется)
 
-1. Перейдите на [railway.app](https://railway.app) и войдите через GitHub
-2. Создайте новый проект → "Deploy from GitHub repo"
-3. Выберите репозиторий `nopointttt/housekeeperbot`
-4. Добавьте PostgreSQL базу данных в проекте
-5. Настройте переменные окружения (см. раздел "Конфигурация")
-6. Railway автоматически задеплоит бота при каждом push в `main`
+1. Перейдите на [render.com](https://render.com) и войдите через GitHub
+2. Создайте PostgreSQL базу данных (New + → PostgreSQL)
+3. Создайте Web Service (New + → Web Service) и подключите репозиторий `nopointttt/housekeeperbot`
+4. Настройте переменные окружения (см. раздел "Конфигурация")
+5. Render автоматически задеплоит бота при каждом push в `main`
 
-**Подробная инструкция:** [`docs/deployment/GITHUB_DEPLOY.md`](docs/deployment/GITHUB_DEPLOY.md)
+**📖 Подробная пошаговая инструкция:** [`docs/deployment/RENDER_DEPLOY.md`](docs/deployment/RENDER_DEPLOY.md) ⭐
 
 ### Другие варианты деплоя
 
-- **Render.com** - [`docs/deployment/GITHUB_DEPLOY.md#вариант-2-rendercom`](docs/deployment/GITHUB_DEPLOY.md#-вариант-2-rendercom)
-- **DigitalOcean App Platform** - [`docs/deployment/GITHUB_DEPLOY.md#вариант-3-digitalocean-app-platform`](docs/deployment/GITHUB_DEPLOY.md#-вариант-3-digitalocean-app-platform)
 - **Docker (локально/VPS)** - [`docs/deployment/DOCKER_DEPLOY.md`](docs/deployment/DOCKER_DEPLOY.md)
+- **Railway.app** - [`docs/deployment/GITHUB_DEPLOY.md#вариант-1-railwayapp-рекомендуется`](docs/deployment/GITHUB_DEPLOY.md#-вариант-1-railwayapp-рекомендуется)
+- **DigitalOcean App Platform** - [`docs/deployment/GITHUB_DEPLOY.md#вариант-3-digitalocean-app-platform`](docs/deployment/GITHUB_DEPLOY.md#-вариант-3-digitalocean-app-platform)
 
 ## 📚 Документация
 
