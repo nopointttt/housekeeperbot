@@ -107,12 +107,33 @@ LOG_LEVEL=INFO
 - Завхоз и руководитель всегда имеют доступ, независимо от белого списка
 - Подробнее о конфигурации: [`docs/CONFIG_EMPLOYEES.md`](docs/CONFIG_EMPLOYEES.md)
 
+## 🚀 Деплой через GitHub
+
+### Быстрый деплой на Railway.app (Рекомендуется)
+
+1. Перейдите на [railway.app](https://railway.app) и войдите через GitHub
+2. Создайте новый проект → "Deploy from GitHub repo"
+3. Выберите репозиторий `nopointttt/housekeeperbot`
+4. Добавьте PostgreSQL базу данных в проекте
+5. Настройте переменные окружения (см. раздел "Конфигурация")
+6. Railway автоматически задеплоит бота при каждом push в `main`
+
+**Подробная инструкция:** [`docs/deployment/GITHUB_DEPLOY.md`](docs/deployment/GITHUB_DEPLOY.md)
+
+### Другие варианты деплоя
+
+- **Render.com** - [`docs/deployment/GITHUB_DEPLOY.md#вариант-2-rendercom`](docs/deployment/GITHUB_DEPLOY.md#-вариант-2-rendercom)
+- **DigitalOcean App Platform** - [`docs/deployment/GITHUB_DEPLOY.md#вариант-3-digitalocean-app-platform`](docs/deployment/GITHUB_DEPLOY.md#-вариант-3-digitalocean-app-platform)
+- **Docker (локально/VPS)** - [`docs/deployment/DOCKER_DEPLOY.md`](docs/deployment/DOCKER_DEPLOY.md)
+
 ## 📚 Документация
 
 - **[Структура проекта](PROJECT_STRUCTURE.md)** - Описание структуры проекта
 - **[Документация проекта](docs/README.md)** - Полный список документации
 - **[Очистка базы данных](CLEAR_DATABASE.md)** - Инструкция по очистке БД
 - **Деплой:** [`docs/deployment/`](docs/deployment/) - Инструкции по деплою
+  - [GitHub Deploy (Railway/Render/DigitalOcean)](docs/deployment/GITHUB_DEPLOY.md) ⭐ Новое
+  - [Docker Deploy](docs/deployment/DOCKER_DEPLOY.md)
 - **Тестирование:** [`docs/testing/`](docs/testing/) - Руководство по тестированию
 - **Настройка:** [`docs/setup/`](docs/setup/) - Инструкции по настройке
 - **Разработка:** [`docs/development/`](docs/development/) - Документация для разработчиков
