@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:16-alpine
+    container_name: zavhoz_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zavhoz
+      POSTGRES_PASSWORD: zavhoz_password
+      POSTGRES_DB: zavhoz_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zavhoz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zavhoz_network
+
+  # Telegram бот
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zavhoz_bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Telegram Bot
+      BOT_TOKEN: ${BOT_TOKEN}
+      
+      # Database (используем имя сервиса postgres как хост)
+      DATABASE_URL: postgresql+asyncpg://zavhoz:zavhoz_password@postgres:5432/zavhoz_db
+      
+      # Roles (Telegram IDs)
+      WAREHOUSEMAN_ID: ${WAREHOUSEMAN_ID}
+      MANAGER_ID: ${MANAGER_ID}
+      ALLOWED_EMPLOYEE_IDS: ${ALLOWED_EMPLOYEE_IDS:-}
+      
+      # Timezone
+      TIMEZONE: ${TIMEZONE:-Europe/Moscow}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - zavhoz_network
+    # Запускаем миграции перед стартом бота
+    # Ждем готовности БД и применяем миграции
+    command: sh -c "sleep 5 && python -m alembic upgrade head && python -m main"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  zavhoz_network:
+    driver: bridge
+
