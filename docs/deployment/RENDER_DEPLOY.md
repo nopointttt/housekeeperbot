@@ -72,7 +72,7 @@
    - **Branch:** `main`
    - **Root Directory:** (оставьте пустым)
    - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `python -m alembic upgrade head && python -m main`
+   - **Start Command:** `python -m alembic upgrade head && uvicorn bot.web:app --host 0.0.0.0 --port $PORT`
    - **Plan:** `Free` (для начала)
 
 ---
@@ -144,7 +144,7 @@ LOG_LEVEL=INFO
 1. Render клонирует репозиторий
 2. Выполняет `pip install -r requirements.txt`
 3. Применяет миграции: `python -m alembic upgrade head`
-4. Запускает бота: `python -m main`
+4. Запускает web сервис (он слушает `$PORT` и поднимает polling в фоне): `uvicorn bot.web:app ...`
 
 ---
 

@@ -6,10 +6,20 @@ from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 
 def normalize_database_url(url: str) -> str:
-    """Нормализовать URL базы данных для asyncpg - убрать SSL параметры"""
+    """Нормализовать URL базы данных для asyncpg.
+
+    - Приводит схему Render `postgres://` / `postgresql://` к `postgresql+asyncpg://`
+    - Убирает SSL query-параметры (asyncpg не принимает sslmode как keyword argument)
+    """
     # Парсим URL
     parsed = urlparse(url)
     query_params = parse_qs(parsed.query)
+
+    # Render часто выдаёт postgres://... или postgresql://...
+    # SQLAlchemy async engine ожидает dialect+driver: postgresql+asyncpg://...
+    scheme = parsed.scheme.lower()
+    if scheme in {"postgres", "postgresql"}:
+        parsed = parsed._replace(scheme="postgresql+asyncpg")
     
     # Удаляем SSL параметры из URL (они будут переданы через connect_args)
     # asyncpg не принимает sslmode как keyword argument в connect()
@@ -22,14 +32,16 @@ def normalize_database_url(url: str) -> str:
     
     # Собираем URL обратно без SSL параметров
     new_query = urlencode(query_params, doseq=True)
-    fixed_url = urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        new_query,
-        parsed.fragment
-    ))
+    fixed_url = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment,
+        )
+    )
     
     return fixed_url
 
