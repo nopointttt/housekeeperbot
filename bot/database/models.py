@@ -21,6 +21,7 @@ class User(Base):
     
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # Telegram ID
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # employee, warehouseman, manager
+    active_role: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Активная роль для менеджера (employee, warehouseman, или None для базовой роли)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

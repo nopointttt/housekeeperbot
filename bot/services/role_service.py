@@ -91,6 +91,81 @@ class RoleService:
     async def is_manager(self, session: AsyncSession, user_id: int) -> bool:
         """Проверить, является ли пользователь руководителем"""
         return await self.is_role(session, user_id, "manager")
+    
+    async def get_active_role(self, session: AsyncSession, user_id: int) -> str:
+        """
+        Получить активную роль пользователя.
+        Для менеджера возвращает active_role если установлена, иначе базовую роль.
+        Для остальных - базовую роль.
+        
+        Args:
+            session: Сессия БД
+            user_id: Telegram ID пользователя
+            
+        Returns:
+            Активная роль пользователя
+        """
+        user = await self.get_or_create_user(session, user_id)
+        
+        # Если пользователь - менеджер и у него установлена active_role
+        if user.role == "manager" and user.active_role:
+            return user.active_role
+        
+        # Иначе возвращаем базовую роль
+        return user.role
+    
+    async def switch_role(self, session: AsyncSession, user_id: int, target_role: str) -> bool:
+        """
+        Переключить активную роль для менеджера.
+        
+        Args:
+            session: Сессия БД
+            user_id: Telegram ID пользователя (должен быть менеджером)
+            target_role: Роль для переключения ('employee' или 'warehouseman')
+            
+        Returns:
+            True если переключение успешно, False если пользователь не менеджер
+        """
+        user = await self.get_or_create_user(session, user_id)
+        
+        # Проверяем, что пользователь - менеджер
+        if user.role != "manager":
+            return False
+        
+        # Проверяем, что целевая роль валидна
+        if target_role not in ["employee", "warehouseman"]:
+            return False
+        
+        # Устанавливаем active_role
+        user.active_role = target_role
+        await session.commit()
+        await session.refresh(user)
+        
+        return True
+    
+    async def reset_role(self, session: AsyncSession, user_id: int) -> bool:
+        """
+        Сбросить активную роль менеджера (вернуться к базовой роли).
+        
+        Args:
+            session: Сессия БД
+            user_id: Telegram ID пользователя (должен быть менеджером)
+            
+        Returns:
+            True если сброс успешен, False если пользователь не менеджер
+        """
+        user = await self.get_or_create_user(session, user_id)
+        
+        # Проверяем, что пользователь - менеджер
+        if user.role != "manager":
+            return False
+        
+        # Сбрасываем active_role
+        user.active_role = None
+        await session.commit()
+        await session.refresh(user)
+        
+        return True
 
 
 # Глобальный экземпляр сервиса

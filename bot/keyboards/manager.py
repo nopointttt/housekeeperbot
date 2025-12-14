@@ -14,6 +14,7 @@ def get_manager_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="В работе > 7 дней")],
             [KeyboardButton(text="Отчёт за период")],
             [KeyboardButton(text="Жалобы на завхоза")],
+            [KeyboardButton(text="Зайти как сотрудник"), KeyboardButton(text="Зайти как завхоз")],
         ],
         resize_keyboard=True,
         one_time_keyboard=False,

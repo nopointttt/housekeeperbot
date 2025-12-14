@@ -78,8 +78,12 @@ class RoleMiddleware(BaseMiddleware):
             # Получаем или создаем пользователя в БД
             user = await role_service.get_or_create_user(session, user_id, telegram_user.username)
             
+            # Получаем активную роль (для менеджера это может быть переключенная роль)
+            active_role = await role_service.get_active_role(session, user_id)
+            
             # Добавляем информацию в data для использования в handlers
-            data["user_role"] = user.role
+            data["user_role"] = active_role  # Используем активную роль
+            data["base_role"] = user.role  # Сохраняем базовую роль для проверки прав
             data["user_id"] = user_id
             data["db_session"] = session
             data["telegram_user"] = telegram_user

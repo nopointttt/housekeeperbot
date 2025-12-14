@@ -46,7 +46,7 @@ def get_welcome_message(role: str, name: str) -> str:
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, user_role: str, telegram_user, db_session):
+async def cmd_start(message: Message, user_role: str, base_role: str, telegram_user, db_session):
     """Обработчик команды /start"""
     user_name = telegram_user.first_name or "Пользователь"
     
@@ -54,12 +54,13 @@ async def cmd_start(message: Message, user_role: str, telegram_user, db_session)
     welcome_text = get_welcome_message(user_role, user_name)
     
     # Получаем клавиатуру в зависимости от роли
+    # Если менеджер переключился на другую роль, показываем соответствующую клавиатуру с кнопкой возврата
     if user_role == "warehouseman":
-        keyboard = get_warehouseman_keyboard()
+        keyboard = get_warehouseman_keyboard(is_manager=(base_role == "manager"))
     elif user_role == "manager":
         keyboard = get_manager_keyboard()
     else:  # employee
-        keyboard = get_employee_keyboard()
+        keyboard = get_employee_keyboard(is_manager=(base_role == "manager"))
     
     await message.answer(
         welcome_text,

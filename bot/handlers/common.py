@@ -1,6 +1,7 @@
 """Общие обработчики"""
 from aiogram import Router, F
 from aiogram.types import Message
+from bot.services.role_service import role_service
 
 router = Router(name="common")
 
@@ -53,4 +54,32 @@ async def cmd_help(message: Message, user_role: str):
         )
     
     await message.answer(help_text, parse_mode="HTML")
+
+
+@router.message(F.text == "Вернуться к роли руководителя")
+async def reset_to_manager_role(message: Message, base_role: str, user_id: int, db_session, telegram_user):
+    """Вернуться к роли руководителя"""
+    if base_role != "manager":
+        await message.answer("❌ У вас нет доступа к этой функции.")
+        return
+    
+    # Сбрасываем активную роль
+    success = await role_service.reset_role(db_session, user_id)
+    
+    if success:
+        # Получаем клавиатуру менеджера
+        from bot.keyboards.manager import get_manager_keyboard
+        
+        user_name = telegram_user.first_name or "Пользователь"
+        await message.answer(
+            f"✅ Вы вернулись к роли <b>Руководитель</b>, {user_name}.\n\n"
+            "Вы снова можете:\n"
+            "• Просматривать заявки и отчеты\n"
+            "• Читать жалобы на завхоза\n"
+            "• Получать автоматические уведомления",
+            reply_markup=get_manager_keyboard(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer("❌ Ошибка при возврате к роли руководителя.")
 

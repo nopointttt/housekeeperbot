@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from bot.services.manager_service import manager_service
 from bot.services.request_service import request_service
 from bot.services.complaint_service import complaint_service
+from bot.services.role_service import role_service
 from bot.utils.request_formatter import format_request_list, format_request_full
 from bot.keyboards.manager import get_manager_keyboard
 from bot.keyboards.inline import get_request_details_keyboard
@@ -509,3 +510,58 @@ async def show_complaints(message: Message, user_role: str, db_session):
     else:
         await message.answer(text, parse_mode="HTML")
 
+
+@router.message(F.text == "Зайти как сотрудник")
+async def switch_to_employee_role(message: Message, base_role: str, user_id: int, db_session, telegram_user):
+    """Переключиться на роль сотрудника"""
+    if base_role != "manager":
+        await message.answer("❌ У вас нет доступа к этой функции.")
+        return
+    
+    # Переключаем роль
+    success = await role_service.switch_role(db_session, user_id, "employee")
+    
+    if success:
+        # Получаем клавиатуру сотрудника (передаем is_manager=True для показа кнопки возврата)
+        from bot.keyboards.employee import get_employee_keyboard
+        
+        await message.answer(
+            "✅ Вы переключились на роль <b>Сотрудник</b>.\n\n"
+            "Теперь вы можете:\n"
+            "• Создавать заявки\n"
+            "• Просматривать свои заявки\n"
+            "• Связаться с завхозом\n\n"
+            "Используйте кнопку 'Вернуться к роли руководителя' чтобы вернуться обратно.",
+            reply_markup=get_employee_keyboard(is_manager=True),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer("❌ Ошибка при переключении роли.")
+
+
+@router.message(F.text == "Зайти как завхоз")
+async def switch_to_warehouseman_role(message: Message, base_role: str, user_id: int, db_session, telegram_user):
+    """Переключиться на роль завхоза"""
+    if base_role != "manager":
+        await message.answer("❌ У вас нет доступа к этой функции.")
+        return
+    
+    # Переключаем роль
+    success = await role_service.switch_role(db_session, user_id, "warehouseman")
+    
+    if success:
+        # Получаем клавиатуру завхоза (передаем is_manager=True для показа кнопки возврата)
+        from bot.keyboards.warehouseman import get_warehouseman_keyboard
+        
+        await message.answer(
+            "✅ Вы переключились на роль <b>Завхоз</b>.\n\n"
+            "Теперь вы можете:\n"
+            "• Управлять заявками\n"
+            "• Работать со складом\n"
+            "• Делать рассылки сотрудникам\n\n"
+            "Используйте кнопку 'Вернуться к роли руководителя' чтобы вернуться обратно.",
+            reply_markup=get_warehouseman_keyboard(is_manager=True),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer("❌ Ошибка при переключении роли.")
