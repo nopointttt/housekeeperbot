@@ -4,7 +4,36 @@ from dataclasses import dataclass
 from typing import Optional, List
 from dotenv import load_dotenv
 
+# Если Render "загружает env", то переменные будут в окружении.
+# load_dotenv() оставляем как fallback для локального запуска (override=False по умолчанию).
 load_dotenv()
+
+
+def _get_env_str(name: str, default: str | None = None) -> str | None:
+    """Получить строковую переменную окружения и аккуратно нормализовать.
+
+    Нормализация нужна потому что .env-файлы часто содержат:
+    - пробелы после '='
+    - кавычки вокруг значения
+    """
+    raw = os.getenv(name, default)
+    if raw is None:
+        return None
+    value = raw.strip()
+    # убрать одинарные/двойные кавычки по краям, если они есть
+    if len(value) >= 2 and ((value[0] == value[-1] == "'") or (value[0] == value[-1] == '"')):
+        value = value[1:-1].strip()
+    return value
+
+
+def _get_env_int(name: str) -> int:
+    value = _get_env_str(name)
+    if not value:
+        raise ValueError(f"{name} не установлен в переменных окружения")
+    try:
+        return int(value)
+    except ValueError as e:
+        raise ValueError(f"{name} должен быть числом (Telegram ID). Получено: '{value}'") from e
 
 
 @dataclass
@@ -31,24 +60,19 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         """Загрузка конфигурации из переменных окружения"""
-        bot_token = os.getenv("BOT_TOKEN")
+        bot_token = _get_env_str("BOT_TOKEN")
         if not bot_token:
             raise ValueError("BOT_TOKEN не установлен в переменных окружения")
         
-        database_url = os.getenv("DATABASE_URL")
+        database_url = _get_env_str("DATABASE_URL")
         if not database_url:
             raise ValueError("DATABASE_URL не установлен в переменных окружения")
         
-        warehouseman_id = os.getenv("WAREHOUSEMAN_ID")
-        if not warehouseman_id:
-            raise ValueError("WAREHOUSEMAN_ID не установлен в переменных окружения")
-        
-        manager_id = os.getenv("MANAGER_ID")
-        if not manager_id:
-            raise ValueError("MANAGER_ID не установлен в переменных окружения")
+        warehouseman_id = _get_env_int("WAREHOUSEMAN_ID")
+        manager_id = _get_env_int("MANAGER_ID")
         
         # Загружаем список ID сотрудников из конфига (через запятую)
-        allowed_employees_str = os.getenv("ALLOWED_EMPLOYEE_IDS", "")
+        allowed_employees_str = _get_env_str("ALLOWED_EMPLOYEE_IDS", "") or ""
         allowed_employee_ids: List[int] = []
         if allowed_employees_str:
             try:
@@ -63,11 +87,11 @@ class Config:
         return cls(
             bot_token=bot_token,
             database_url=database_url,
-            warehouseman_id=int(warehouseman_id),
-            manager_id=int(manager_id),
+            warehouseman_id=warehouseman_id,
+            manager_id=manager_id,
             allowed_employee_ids=allowed_employee_ids,
-            timezone=os.getenv("TIMEZONE", "Europe/Moscow"),
-            log_level=os.getenv("LOG_LEVEL", "INFO"),
+            timezone=_get_env_str("TIMEZONE", "Europe/Moscow") or "Europe/Moscow",
+            log_level=_get_env_str("LOG_LEVEL", "INFO") or "INFO",
         )
     
     def is_allowed_user(self, user_id: int) -> bool:
