@@ -18,11 +18,11 @@ router = Router(name="warehouse")
 # ==================== ПРОСМОТР СКЛАДА ====================
 
 @router.message(F.text == "Склад")
-async def show_warehouse(message: Message, db_session):
+async def show_warehouse(message: Message, tenant_id: int, db_session):
     """Показать склад"""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    items = await warehouse_service.get_all_items(db_session)
+    items = await warehouse_service.get_all_items(db_session, tenant_id=tenant_id)
     
     if not items:
         keyboard = InlineKeyboardMarkup(
@@ -59,12 +59,12 @@ async def show_warehouse(message: Message, db_session):
 # ==================== ПРОСМОТР ДЕТАЛЕЙ ПОЗИЦИИ ====================
 
 @router.callback_query(F.data.startswith("warehouse_item_"))
-async def show_warehouse_item(callback: CallbackQuery, db_session):
+async def show_warehouse_item(callback: CallbackQuery, tenant_id: int, db_session, user_role: str):
     """Показать детали позиции на складе"""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     item_id = int(callback.data.split("_")[-1])
-    item = await warehouse_service.get_item_by_id(db_session, item_id)
+    item = await warehouse_service.get_item_by_id(db_session, tenant_id=tenant_id, item_id=item_id)
     
     if not item:
         await callback.answer("Позиция не найдена", show_alert=True)
@@ -79,7 +79,7 @@ async def show_warehouse_item(callback: CallbackQuery, db_session):
     text += f"📉 <b>Минимальный остаток:</b> {item.min_quantity} шт.\n"
     text += f"📅 <b>Обновлено:</b> {item.updated_at.strftime('%d.%m.%Y %H:%M')}"
     
-    keyboard = get_warehouse_item_keyboard(item.id)
+    keyboard = get_warehouse_item_keyboard(item.id, user_role)
     
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -102,7 +102,7 @@ async def start_add_item(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(WarehouseManagementStates.waiting_for_item_name)
-async def process_item_name(message: Message, state: FSMContext, db_session):
+async def process_item_name(message: Message, state: FSMContext, tenant_id: int, db_session):
     """Обработка названия позиции"""
     name = message.text.strip()
     
@@ -111,7 +111,7 @@ async def process_item_name(message: Message, state: FSMContext, db_session):
         return
     
     # Проверяем, не существует ли уже такая позиция
-    existing = await warehouse_service.get_item_by_name(db_session, name)
+    existing = await warehouse_service.get_item_by_name(db_session, tenant_id=tenant_id, name=name)
     if existing:
         await message.answer(
             f"❌ Позиция '{name}' уже существует на складе.\n"
@@ -132,7 +132,7 @@ async def process_item_name(message: Message, state: FSMContext, db_session):
 
 
 @router.message(WarehouseManagementStates.waiting_for_min_quantity)
-async def process_min_quantity(message: Message, state: FSMContext, db_session):
+async def process_min_quantity(message: Message, state: FSMContext, tenant_id: int, db_session, user_role: str):
     """Обработка минимального остатка"""
     try:
         min_quantity = int(message.text.strip())
@@ -151,12 +151,16 @@ async def process_min_quantity(message: Message, state: FSMContext, db_session):
             return
         
         # Создаем позицию
-        item = await warehouse_service.create_item(db_session, item_name, min_quantity)
+        item = await warehouse_service.create_item(db_session, tenant_id=tenant_id, name=item_name, min_quantity=min_quantity)
+        
+        # Получаем правильную клавиатуру в зависимости от роли
+        from bot.keyboards.manager import get_manager_keyboard
+        keyboard = get_manager_keyboard() if user_role == "manager" else get_warehouseman_keyboard()
         
         await message.answer(
             f"✅ Позиция '{item.name}' добавлена на склад!\n"
             f"Минимальный остаток: {item.min_quantity} шт.",
-            reply_markup=get_warehouseman_keyboard()
+            reply_markup=keyboard
         )
         
         await state.clear()
@@ -185,8 +189,13 @@ async def start_add_quantity(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("warehouse_subtract_"))
-async def start_subtract_quantity(callback: CallbackQuery, state: FSMContext):
+async def start_subtract_quantity(callback: CallbackQuery, state: FSMContext, user_role: str):
     """Начало списания количества"""
+    # Проверяем, что пользователь имеет право списывать (только руководитель)
+    if user_role != "manager":
+        await callback.answer("❌ У вас нет доступа к списанию. Эта функция доступна только руководителю.", show_alert=True)
+        return
+    
     item_id = int(callback.data.split("_")[-1])
     
     await state.update_data(item_id=item_id, action="subtract")
@@ -202,7 +211,7 @@ async def start_subtract_quantity(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(WarehouseManagementStates.waiting_for_add_quantity)
-async def process_add_quantity(message: Message, state: FSMContext, db_session):
+async def process_add_quantity(message: Message, state: FSMContext, tenant_id: int, db_session, user_role: str):
     """Обработка добавления количества"""
     try:
         quantity = int(message.text.strip())
@@ -219,17 +228,21 @@ async def process_add_quantity(message: Message, state: FSMContext, db_session):
             await state.clear()
             return
         
-        item = await warehouse_service.add_quantity(db_session, item_id, quantity)
+        item = await warehouse_service.add_quantity(db_session, tenant_id=tenant_id, item_id=item_id, quantity=quantity)
         
         if not item:
             await message.answer("❌ Позиция не найдена.")
             await state.clear()
             return
         
+        # Получаем правильную клавиатуру в зависимости от роли
+        from bot.keyboards.manager import get_manager_keyboard
+        keyboard = get_manager_keyboard() if user_role == "manager" else get_warehouseman_keyboard()
+        
         await message.answer(
             f"✅ Добавлено {quantity} шт.\n"
             f"Текущее количество: {item.current_quantity} шт.",
-            reply_markup=get_warehouseman_keyboard()
+            reply_markup=keyboard
         )
         
         await state.clear()
@@ -239,8 +252,14 @@ async def process_add_quantity(message: Message, state: FSMContext, db_session):
 
 
 @router.message(WarehouseManagementStates.waiting_for_subtract_quantity)
-async def process_subtract_quantity(message: Message, state: FSMContext, db_session):
+async def process_subtract_quantity(message: Message, state: FSMContext, tenant_id: int, db_session, user_role: str):
     """Обработка списания количества"""
+    # Дополнительная проверка роли
+    if user_role != "manager":
+        await message.answer("❌ У вас нет доступа к списанию. Эта функция доступна только руководителю.")
+        await state.clear()
+        return
+    
     try:
         quantity = int(message.text.strip())
         
@@ -256,11 +275,11 @@ async def process_subtract_quantity(message: Message, state: FSMContext, db_sess
             await state.clear()
             return
         
-        item = await warehouse_service.subtract_quantity(db_session, item_id, quantity)
+        item = await warehouse_service.subtract_quantity(db_session, tenant_id=tenant_id, item_id=item_id, quantity=quantity)
         
         if not item:
             # Проверяем, недостаточно ли товара
-            existing_item = await warehouse_service.get_item_by_id(db_session, item_id)
+            existing_item = await warehouse_service.get_item_by_id(db_session, tenant_id=tenant_id, item_id=item_id)
             if existing_item and existing_item.current_quantity < quantity:
                 await message.answer(
                     f"❌ Недостаточно товара!\n"
@@ -272,10 +291,14 @@ async def process_subtract_quantity(message: Message, state: FSMContext, db_sess
             await state.clear()
             return
         
+        # Получаем правильную клавиатуру в зависимости от роли
+        from bot.keyboards.manager import get_manager_keyboard
+        keyboard = get_manager_keyboard() if user_role == "manager" else get_warehouseman_keyboard()
+        
         await message.answer(
             f"✅ Списано {quantity} шт.\n"
             f"Текущее количество: {item.current_quantity} шт.",
-            reply_markup=get_warehouseman_keyboard()
+            reply_markup=keyboard
         )
         
         await state.clear()
@@ -304,7 +327,7 @@ async def start_change_min_quantity(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(WarehouseManagementStates.waiting_for_new_min_quantity)
-async def process_new_min_quantity(message: Message, state: FSMContext, db_session):
+async def process_new_min_quantity(message: Message, state: FSMContext, tenant_id: int, db_session, user_role: str):
     """Обработка нового минимального остатка"""
     try:
         min_quantity = int(message.text.strip())
@@ -321,18 +344,22 @@ async def process_new_min_quantity(message: Message, state: FSMContext, db_sessi
             await state.clear()
             return
         
-        item = await warehouse_service.update_min_quantity(db_session, item_id, min_quantity)
+        item = await warehouse_service.update_min_quantity(db_session, tenant_id=tenant_id, item_id=item_id, min_quantity=min_quantity)
         
         if not item:
             await message.answer("❌ Позиция не найдена.")
             await state.clear()
             return
         
+        # Получаем правильную клавиатуру в зависимости от роли
+        from bot.keyboards.manager import get_manager_keyboard
+        keyboard = get_manager_keyboard() if user_role == "manager" else get_warehouseman_keyboard()
+        
         await message.answer(
             f"✅ Минимальный остаток обновлен!\n"
             f"Новый минимальный остаток: {item.min_quantity} шт.\n"
             f"Текущее количество: {item.current_quantity} шт.",
-            reply_markup=get_warehouseman_keyboard()
+            reply_markup=keyboard
         )
         
         await state.clear()
@@ -344,14 +371,18 @@ async def process_new_min_quantity(message: Message, state: FSMContext, db_sessi
 # ==================== ОТМЕНА ====================
 
 @router.callback_query(F.data == "warehouse_cancel")
-async def cancel_warehouse_action(callback: CallbackQuery, state: FSMContext):
+async def cancel_warehouse_action(callback: CallbackQuery, state: FSMContext, user_role: str):
     """Отмена действия со складом"""
     await state.clear()
+    
+    # Получаем правильную клавиатуру в зависимости от роли
+    from bot.keyboards.manager import get_manager_keyboard
+    keyboard = get_manager_keyboard() if user_role == "manager" else get_warehouseman_keyboard()
     
     await callback.message.edit_text("❌ Действие отменено.")
     await callback.message.answer(
         "Выберите действие:",
-        reply_markup=get_warehouseman_keyboard()
+        reply_markup=keyboard
     )
     
     await callback.answer("Отменено")

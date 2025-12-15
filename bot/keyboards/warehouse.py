@@ -4,25 +4,32 @@ from typing import List
 from bot.database.models import WarehouseItem
 
 
-def get_warehouse_item_keyboard(item_id: int) -> InlineKeyboardMarkup:
+def get_warehouse_item_keyboard(item_id: int, user_role: str) -> InlineKeyboardMarkup:
     """
     Получить inline клавиатуру для позиции на складе
     
     Args:
         item_id: ID позиции
+        user_role: Роль пользователя ('warehouseman' или 'manager')
+                   Техник (warehouseman) может только добавлять, руководитель может и добавлять и списывать
     """
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="➕ Приход", callback_data=f"warehouse_add_{item_id}"),
-                InlineKeyboardButton(text="➖ Списать", callback_data=f"warehouse_subtract_{item_id}"),
-            ],
-            [
-                InlineKeyboardButton(text="⚙️ Изменить мин. остаток", callback_data=f"warehouse_min_{item_id}"),
-            ],
-        ]
-    )
-    return keyboard
+    buttons = []
+    
+    # Кнопка прихода (доступна всем)
+    buttons.append([
+        InlineKeyboardButton(text="➕ Приход", callback_data=f"warehouse_add_{item_id}"),
+    ])
+    
+    # Кнопка списания (только для руководителя)
+    if user_role == "manager":
+        buttons[0].append(InlineKeyboardButton(text="➖ Списать", callback_data=f"warehouse_subtract_{item_id}"))
+    
+    # Кнопка изменения минимального остатка (доступна всем)
+    buttons.append([
+        InlineKeyboardButton(text="⚙️ Изменить мин. остаток", callback_data=f"warehouse_min_{item_id}"),
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_warehouse_list_keyboard(items: List[WarehouseItem]) -> InlineKeyboardMarkup:

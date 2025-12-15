@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # ==================== НАЧАЛО СОЗДАНИЯ ЖАЛОБЫ ====================
 
 @router.callback_query(F.data.startswith("complaint_start_"))
-async def start_complaint_creation(callback: CallbackQuery, state: FSMContext, user_id: int, db_session):
+async def start_complaint_creation(callback: CallbackQuery, state: FSMContext, user_id: int, tenant_id: int, db_session):
     """Начало создания жалобы"""
     # Сразу отвечаем на callback, чтобы убрать индикатор загрузки
     await callback.answer()
@@ -38,6 +38,7 @@ async def start_complaint_creation(callback: CallbackQuery, state: FSMContext, u
         # Для жалобы не нужен user, только номер заявки - оптимизируем запрос
         request = await request_service.get_request_by_id(
             db_session, 
+            tenant_id,
             request_id, 
             load_user=False,  # Не загружаем user - ускоряет запрос
             load_photos=False  # Не загружаем фото - ускоряет запрос
@@ -60,7 +61,7 @@ async def start_complaint_creation(callback: CallbackQuery, state: FSMContext, u
         keyboard = get_complaint_reasons_keyboard()
         
         text = (
-            f"⚠️ <b>Жалоба на завхоза</b>\n\n"
+            f"⚠️ <b>Жалоба на техника</b>\n\n"
             f"📋 Заявка: <b>{request.number}</b>\n\n"
             "Выберите причину жалобы:"
         )
@@ -154,7 +155,7 @@ async def process_complaint_reason(callback: CallbackQuery, state: FSMContext):
 # ==================== ВВОД ТЕКСТА ЖАЛОБЫ ====================
 
 @router.message(ComplaintCreationStates.waiting_for_text)
-async def process_complaint_text(message: Message, state: FSMContext, user_id: int, db_session, bot):
+async def process_complaint_text(message: Message, state: FSMContext, user_id: int, tenant_id: int, db_session, bot, base_role: str):
     """Обработка ввода текста жалобы"""
     text = message.text.strip()
     
@@ -175,7 +176,7 @@ async def process_complaint_text(message: Message, state: FSMContext, user_id: i
         return
     
     # Получаем заявку
-    request = await request_service.get_request_by_id(db_session, request_id)
+    request = await request_service.get_request_by_id(db_session, tenant_id=tenant_id, request_id=request_id)
     if not request:
         await message.answer("❌ Заявка не найдена.")
         await state.clear()
@@ -187,6 +188,7 @@ async def process_complaint_text(message: Message, state: FSMContext, user_id: i
         # Создаем жалобу
         complaint = await complaint_service.create_complaint(
             session=db_session,
+            tenant_id=tenant_id,
             user_id=user_id,
             request_id=request_id,
             reason=reason,
@@ -209,7 +211,7 @@ async def process_complaint_text(message: Message, state: FSMContext, user_id: i
         await message.answer(
             "✅ <b>Жалоба отправлена!</b>\n\n"
             "Руководитель получил уведомление.",
-            reply_markup=get_employee_keyboard(),
+            reply_markup=get_employee_keyboard(is_manager=(base_role == "manager")),
             parse_mode="HTML"
         )
         
@@ -219,7 +221,7 @@ async def process_complaint_text(message: Message, state: FSMContext, user_id: i
         await message.answer(
             f"❌ Ошибка при создании жалобы: {e}\n"
             "Попробуйте позже или обратитесь к руководителю напрямую.",
-            reply_markup=get_employee_keyboard()
+            reply_markup=get_employee_keyboard(is_manager=(base_role == "manager"))
         )
         await state.clear()
 
@@ -227,14 +229,14 @@ async def process_complaint_text(message: Message, state: FSMContext, user_id: i
 # ==================== ОТМЕНА СОЗДАНИЯ ЖАЛОБЫ ====================
 
 @router.callback_query(F.data == "cancel_complaint")
-async def cancel_complaint_creation(callback: CallbackQuery, state: FSMContext):
+async def cancel_complaint_creation(callback: CallbackQuery, state: FSMContext, base_role: str):
     """Отмена создания жалобы"""
     await state.clear()
     
     await callback.message.edit_text("❌ Создание жалобы отменено.")
     await callback.message.answer(
         "Выберите действие:",
-        reply_markup=get_employee_keyboard()
+        reply_markup=get_employee_keyboard(is_manager=(base_role == "manager"))
     )
     
     await callback.answer("Отменено")

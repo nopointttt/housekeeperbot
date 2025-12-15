@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class ManagerService:
     """Сервис для просмотра заявок и жалоб руководителем"""
     
-    async def get_requests_today(self, session: AsyncSession) -> list[Request]:
+    async def get_requests_today(self, session: AsyncSession, tenant_id: int) -> list[Request]:
         """
         Получить все заявки за сегодня
         
@@ -27,13 +27,14 @@ class ManagerService:
         
         result = await session.execute(
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .where(Request.created_at >= today_start)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(Request.created_at.desc())
         )
         return list(result.scalars().all())
     
-    async def get_requests_week(self, session: AsyncSession) -> list[Request]:
+    async def get_requests_week(self, session: AsyncSession, tenant_id: int) -> list[Request]:
         """
         Получить все заявки за неделю
         
@@ -47,6 +48,7 @@ class ManagerService:
         
         result = await session.execute(
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .where(Request.created_at >= week_start)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(Request.created_at.desc())
@@ -56,6 +58,7 @@ class ManagerService:
     async def get_requests_in_work_over_days(
         self,
         session: AsyncSession,
+        tenant_id: int,
         days: int
     ) -> list[Request]:
         """
@@ -74,6 +77,7 @@ class ManagerService:
             select(Request)
             .where(
                 and_(
+                    Request.tenant_id == tenant_id,
                     Request.status == "in_progress",
                     Request.updated_at <= cutoff_date
                 )
@@ -86,6 +90,7 @@ class ManagerService:
     async def get_period_report(
         self,
         session: AsyncSession,
+        tenant_id: int,
         start_date: datetime,
         end_date: datetime
     ) -> dict:
@@ -112,6 +117,7 @@ class ManagerService:
             select(func.count(Request.id))
             .where(
                 and_(
+                    Request.tenant_id == tenant_id,
                     Request.status == "new",
                     Request.created_at >= start_date,
                     Request.created_at <= end_date
@@ -123,6 +129,7 @@ class ManagerService:
             select(func.count(Request.id))
             .where(
                 and_(
+                    Request.tenant_id == tenant_id,
                     Request.status == "in_progress",
                     Request.created_at >= start_date,
                     Request.created_at <= end_date
@@ -134,6 +141,7 @@ class ManagerService:
             select(func.count(Request.id))
             .where(
                 and_(
+                    Request.tenant_id == tenant_id,
                     Request.status == "completed",
                     Request.completed_at >= start_date,
                     Request.completed_at <= end_date
@@ -145,6 +153,7 @@ class ManagerService:
             select(func.count(Request.id))
             .where(
                 and_(
+                    Request.tenant_id == tenant_id,
                     Request.status == "rejected",
                     Request.updated_at >= start_date,
                     Request.updated_at <= end_date
@@ -156,6 +165,7 @@ class ManagerService:
             select(func.count(Request.id))
             .where(
                 and_(
+                    Request.tenant_id == tenant_id,
                     Request.created_at >= start_date,
                     Request.created_at <= end_date
                 )
@@ -170,7 +180,7 @@ class ManagerService:
             'total': total_count.scalar() or 0
         }
     
-    async def get_all_requests(self, session: AsyncSession, limit: Optional[int] = None) -> list[Request]:
+    async def get_all_requests(self, session: AsyncSession, tenant_id: int, limit: Optional[int] = None) -> list[Request]:
         """
         Получить все заявки
         
@@ -183,6 +193,7 @@ class ManagerService:
         """
         query = (
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(Request.created_at.desc())
         )
@@ -193,9 +204,9 @@ class ManagerService:
         result = await session.execute(query)
         return list(result.scalars().all())
     
-    async def get_all_complaints(self, session: AsyncSession) -> list[Complaint]:
+    async def get_all_complaints(self, session: AsyncSession, tenant_id: int) -> list[Complaint]:
         """
-        Получить все жалобы на завхоза
+        Получить все жалобы на техника
         
         Args:
             session: Сессия БД
@@ -206,6 +217,7 @@ class ManagerService:
         logger.debug("Запрос всех жалоб из БД")
         result = await session.execute(
             select(Complaint)
+            .where(Complaint.tenant_id == tenant_id)
             .options(selectinload(Complaint.user))
             .order_by(Complaint.created_at.desc())
         )
@@ -218,6 +230,7 @@ class ManagerService:
     async def get_complaint_by_id(
         self,
         session: AsyncSession,
+        tenant_id: int,
         complaint_id: int
     ) -> Optional[Complaint]:
         """
@@ -233,6 +246,7 @@ class ManagerService:
         result = await session.execute(
             select(Complaint)
             .where(Complaint.id == complaint_id)
+            .where(Complaint.tenant_id == tenant_id)
             .options(selectinload(Complaint.user))
         )
         return result.scalar_one_or_none()

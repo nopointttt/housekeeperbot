@@ -8,7 +8,7 @@ from bot.database.models import WarehouseItem
 class WarehouseService:
     """Сервис для управления складом"""
     
-    async def get_all_items(self, session: AsyncSession) -> List[WarehouseItem]:
+    async def get_all_items(self, session: AsyncSession, tenant_id: int) -> List[WarehouseItem]:
         """
         Получить все позиции на складе
         
@@ -19,13 +19,16 @@ class WarehouseService:
             Список всех позиций
         """
         result = await session.execute(
-            select(WarehouseItem).order_by(WarehouseItem.name)
+            select(WarehouseItem)
+            .where(WarehouseItem.tenant_id == tenant_id)
+            .order_by(WarehouseItem.name)
         )
         return list(result.scalars().all())
     
     async def get_item_by_id(
         self,
         session: AsyncSession,
+        tenant_id: int,
         item_id: int
     ) -> Optional[WarehouseItem]:
         """
@@ -38,11 +41,17 @@ class WarehouseService:
         Returns:
             Позиция или None
         """
-        return await session.get(WarehouseItem, item_id)
+        result = await session.execute(
+            select(WarehouseItem)
+            .where(WarehouseItem.id == item_id)
+            .where(WarehouseItem.tenant_id == tenant_id)
+        )
+        return result.scalar_one_or_none()
     
     async def get_item_by_name(
         self,
         session: AsyncSession,
+        tenant_id: int,
         name: str
     ) -> Optional[WarehouseItem]:
         """
@@ -56,13 +65,16 @@ class WarehouseService:
             Позиция или None
         """
         result = await session.execute(
-            select(WarehouseItem).where(WarehouseItem.name == name)
+            select(WarehouseItem)
+            .where(WarehouseItem.tenant_id == tenant_id)
+            .where(WarehouseItem.name == name)
         )
         return result.scalar_one_or_none()
     
     async def create_item(
         self,
         session: AsyncSession,
+        tenant_id: int,
         name: str,
         min_quantity: int = 0
     ) -> WarehouseItem:
@@ -78,6 +90,7 @@ class WarehouseService:
             Созданная позиция
         """
         item = WarehouseItem(
+            tenant_id=tenant_id,
             name=name,
             current_quantity=0,
             min_quantity=min_quantity
@@ -92,6 +105,7 @@ class WarehouseService:
     async def add_quantity(
         self,
         session: AsyncSession,
+        tenant_id: int,
         item_id: int,
         quantity: int
     ) -> Optional[WarehouseItem]:
@@ -106,7 +120,7 @@ class WarehouseService:
         Returns:
             Обновленная позиция или None
         """
-        item = await session.get(WarehouseItem, item_id)
+        item = await self.get_item_by_id(session, tenant_id=tenant_id, item_id=item_id)
         
         if not item:
             return None
@@ -121,6 +135,7 @@ class WarehouseService:
     async def subtract_quantity(
         self,
         session: AsyncSession,
+        tenant_id: int,
         item_id: int,
         quantity: int
     ) -> Optional[WarehouseItem]:
@@ -135,7 +150,7 @@ class WarehouseService:
         Returns:
             Обновленная позиция или None (если недостаточно товара)
         """
-        item = await session.get(WarehouseItem, item_id)
+        item = await self.get_item_by_id(session, tenant_id=tenant_id, item_id=item_id)
         
         if not item:
             return None
@@ -153,6 +168,7 @@ class WarehouseService:
     async def update_min_quantity(
         self,
         session: AsyncSession,
+        tenant_id: int,
         item_id: int,
         min_quantity: int
     ) -> Optional[WarehouseItem]:
@@ -167,7 +183,7 @@ class WarehouseService:
         Returns:
             Обновленная позиция или None
         """
-        item = await session.get(WarehouseItem, item_id)
+        item = await self.get_item_by_id(session, tenant_id=tenant_id, item_id=item_id)
         
         if not item:
             return None
@@ -179,7 +195,7 @@ class WarehouseService:
         
         return item
     
-    async def get_low_stock_items(self, session: AsyncSession) -> List[WarehouseItem]:
+    async def get_low_stock_items(self, session: AsyncSession, tenant_id: int) -> List[WarehouseItem]:
         """
         Получить позиции с остатком <= минимального
         
@@ -191,6 +207,7 @@ class WarehouseService:
         """
         result = await session.execute(
             select(WarehouseItem)
+            .where(WarehouseItem.tenant_id == tenant_id)
             .where(WarehouseItem.current_quantity <= WarehouseItem.min_quantity)
             .order_by(WarehouseItem.name)
         )

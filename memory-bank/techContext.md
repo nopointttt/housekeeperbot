@@ -29,3 +29,20 @@
 - **Environment Variables:** Все настройки через env переменные
 - **Bot Mode:** Webhook (для Cloudflare) или Polling (для других платформ)
 
+## Environment Variables
+- `BOT_TOKEN` - Telegram Bot Token от @BotFather
+- `DATABASE_URL` - строка подключения к PostgreSQL
+- `WAREHOUSEMAN_ID` - Telegram ID техника (в продакшн режиме)
+- `MANAGER_ID` - Telegram ID руководителя (в продакшн режиме)
+- `ALLOWED_EMPLOYEE_IDS` - список разрешенных Telegram ID (через запятую, в продакшн режиме)
+- `DEMO_MODE` - демо-режим (true/false), включает публичный доступ и изоляцию данных
+- `PUBLIC_ACCESS` - публичный доступ без allowlist (true/false)
+- `BOT_PUBLIC_URL` - публичная ссылка на бота для отображения в /start (например: https://t.me/housekeeperrrrrbot)
+
+## Demo Mode Features
+- Публичный доступ без allowlist (`DEMO_MODE=true`)
+- Изоляция данных через `tenant_id` (каждый пользователь = свой tenant_id)
+- Ограничение тестового доступа 7 днями
+- Управление техниками (назначение техников руководителям)
+- Приоритетная логика: техники работают с tenant_id руководителя
+

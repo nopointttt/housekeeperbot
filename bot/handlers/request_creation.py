@@ -286,7 +286,7 @@ async def proceed_to_confirmation(message: Message, state: FSMContext, data: Req
 
 
 @router.callback_query(F.data == "confirm_request", RequestCreationStates.waiting_for_confirmation)
-async def confirm_request(callback: CallbackQuery, state: FSMContext, user_id: int, user_role: str, db_session, bot):
+async def confirm_request(callback: CallbackQuery, state: FSMContext, user_id: int, user_role: str, base_role: str, tenant_id: int, db_session, bot):
     """Подтверждение и создание заявки"""
     data_dict = await state.get_data()
     data = RequestCreationData.from_dict(data_dict)
@@ -300,6 +300,7 @@ async def confirm_request(callback: CallbackQuery, state: FSMContext, user_id: i
         # Создаем заявку
         request = await request_service.create_request(
             session=db_session,
+            tenant_id=tenant_id,
             user_id=user_id,
             category=data.category,
             description=data.description,
@@ -308,7 +309,7 @@ async def confirm_request(callback: CallbackQuery, state: FSMContext, user_id: i
             photo_file_ids=data.photos if data.photos else None
         )
         
-        # Отправляем уведомление завхозу
+        # Отправляем уведомление технику
         from bot.services.notification_service import NotificationService
         notification_service = NotificationService(bot)
         await notification_service.notify_warehouseman_new_request(request)
@@ -320,7 +321,7 @@ async def confirm_request(callback: CallbackQuery, state: FSMContext, user_id: i
         await callback.message.edit_text(
             f"✅ <b>Заявка успешно создана!</b>\n\n"
             f"📋 <b>Номер заявки:</b> {request.number}\n\n"
-            "Заявка отправлена завхозу. Вы получите уведомление о смене статуса.",
+            "Заявка отправлена технику. Вы получите уведомление о смене статуса.",
             parse_mode="HTML"
         )
         
@@ -331,9 +332,9 @@ async def confirm_request(callback: CallbackQuery, state: FSMContext, user_id: i
         if user_role == "manager":
             keyboard = get_manager_keyboard()
         elif user_role == "warehouseman":
-            keyboard = get_warehouseman_keyboard()
+            keyboard = get_warehouseman_keyboard(is_manager=(base_role == "manager"))
         else:
-            keyboard = get_employee_keyboard()
+            keyboard = get_employee_keyboard(is_manager=(base_role == "manager"))
         
         await callback.message.answer(
             "Выберите действие:",
@@ -454,7 +455,7 @@ async def back_to_confirm(callback: CallbackQuery, state: FSMContext):
 # ==================== ОТМЕНА СОЗДАНИЯ ЗАЯВКИ ====================
 
 @router.callback_query(F.data == "cancel_request")
-async def cancel_request_creation(callback: CallbackQuery, state: FSMContext, user_role: str):
+async def cancel_request_creation(callback: CallbackQuery, state: FSMContext, user_role: str, base_role: str):
     """Отмена создания заявки"""
     await state.clear()
     
@@ -468,11 +469,11 @@ async def cancel_request_creation(callback: CallbackQuery, state: FSMContext, us
     from bot.keyboards.manager import get_manager_keyboard
     
     if user_role == "warehouseman":
-        keyboard = get_warehouseman_keyboard()
+        keyboard = get_warehouseman_keyboard(is_manager=(base_role == "manager"))
     elif user_role == "manager":
         keyboard = get_manager_keyboard()
     else:
-        keyboard = get_employee_keyboard()
+        keyboard = get_employee_keyboard(is_manager=(base_role == "manager"))
     
     await callback.message.answer(
         "Выберите действие:",

@@ -15,7 +15,10 @@
 │   - Role Service                    │
 │   - Request Service                 │
 │   - Warehouse Service               │
+│   - Technician Service              │
 │   - Notification Service            │
+│   - Marketing Service               │
+│   - Automation Service              │
 └─────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────┐
@@ -98,6 +101,14 @@ project/
 - Проверка прав доступа на каждом уровне
 - Безопасное хранение токенов (env переменные)
 - Защита от SQL injection (ORM)
+- Изоляция данных через tenant_id в демо-режиме
+- Ограничение тестового доступа (7 дней)
+
+### Multi-Tenant Architecture (DEMO_MODE)
+- Каждый пользователь получает свой tenant_id = Telegram ID
+- Все данные (requests, complaints, warehouse_items) изолированы по tenant_id
+- Техники работают с tenant_id своего руководителя
+- Приоритетная логика: назначение техником отменяет статус руководителя
 
 ### Performance
 - Кэширование часто используемых данных

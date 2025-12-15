@@ -1,0 +1,4 @@
+# Redirects для Cloudflare Pages
+# Если нужно добавить редиректы, используй этот формат:
+# /old-page /new-page 301
+

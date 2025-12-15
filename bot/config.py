@@ -36,6 +36,22 @@ def _get_env_int(name: str) -> int:
         raise ValueError(f"{name} должен быть числом (Telegram ID). Получено: '{value}'") from e
 
 
+def _get_env_bool(name: str, default: bool = False) -> bool:
+    """Получить булеву переменную окружения.
+
+    Поддерживает значения: 1/0, true/false, yes/no, on/off (в любом регистре).
+    """
+    raw = _get_env_str(name)
+    if raw is None or raw == "":
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 @dataclass
 class Config:
     """Конфигурация приложения"""
@@ -49,7 +65,19 @@ class Config:
     # Roles (Telegram IDs)
     warehouseman_id: int
     manager_id: int
-    allowed_employee_ids: List[int]  # Список ID сотрудников из конфига
+    allowed_employee_ids: List[int]  # Список ID пользователей из конфига
+
+    # Demo / Access mode
+    # - demo_mode: разрешает всем пользователям входить в бота и включает изоляцию данных по tenant_id
+    # - public_access: разрешает вход всем пользователям, но НЕ включает изоляцию данных
+    demo_mode: bool = False
+    public_access: bool = False
+
+    # Public bot link (optional, for marketing / onboarding)
+    # Examples:
+    # - https://t.me/YourBotUsername
+    # - @YourBotUsername
+    bot_public_url: str | None = None
     
     # Timezone
     timezone: str = "Europe/Moscow"
@@ -71,7 +99,7 @@ class Config:
         warehouseman_id = _get_env_int("WAREHOUSEMAN_ID")
         manager_id = _get_env_int("MANAGER_ID")
         
-        # Загружаем список ID сотрудников из конфига (через запятую)
+        # Загружаем список ID пользователей из конфига (через запятую)
         allowed_employees_str = _get_env_str("ALLOWED_EMPLOYEE_IDS", "") or ""
         allowed_employee_ids: List[int] = []
         if allowed_employees_str:
@@ -90,8 +118,11 @@ class Config:
             warehouseman_id=warehouseman_id,
             manager_id=manager_id,
             allowed_employee_ids=allowed_employee_ids,
+            demo_mode=_get_env_bool("DEMO_MODE", default=False),
+            public_access=_get_env_bool("PUBLIC_ACCESS", default=False),
             timezone=_get_env_str("TIMEZONE", "Europe/Moscow") or "Europe/Moscow",
             log_level=_get_env_str("LOG_LEVEL", "INFO") or "INFO",
+            bot_public_url=_get_env_str("BOT_PUBLIC_URL"),
         )
     
     def is_allowed_user(self, user_id: int) -> bool:
@@ -104,11 +135,15 @@ class Config:
         Returns:
             True если пользователь имеет доступ
         """
-        # Завхоз и руководитель всегда имеют доступ
+        # В demo/public режиме разрешаем вход всем
+        if self.demo_mode or self.public_access:
+            return True
+
+        # Техник и руководитель всегда имеют доступ
         if user_id == self.warehouseman_id or user_id == self.manager_id:
             return True
         
-        # Проверяем в списке разрешенных сотрудников из конфига
+        # Проверяем в списке разрешенных пользователей из конфига
         if user_id in self.allowed_employee_ids:
             return True
         
@@ -116,6 +151,11 @@ class Config:
     
     def get_role_by_id(self, user_id: int) -> str:
         """Определить роль пользователя по Telegram ID"""
+        # В demo режиме все пользователи считаются руководителями,
+        # а переключение режимов делаем через active_role.
+        if self.demo_mode:
+            return "manager"
+
         if user_id == self.warehouseman_id:
             return "warehouseman"
         elif user_id == self.manager_id:

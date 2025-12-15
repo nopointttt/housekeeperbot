@@ -15,19 +15,21 @@ class AutomationService:
     
     async def check_warehouse_minimum(self):
         """
-        Проверить минимальные остатки на складе и уведомить завхоза
+        Проверить минимальные остатки на складе и уведомить техника
         
         Вызывается ежедневно в 8:30
         """
         async with async_session_maker() as session:
             try:
-                low_stock_items = await warehouse_service.get_low_stock_items(session)
+                from bot.config import get_config
+                config = get_config()
+                if config.demo_mode:
+                    return
+
+                low_stock_items = await warehouse_service.get_low_stock_items(session, tenant_id=0)
                 
                 if not low_stock_items:
                     return  # Нет позиций с низким остатком
-                
-                from bot.config import get_config
-                config = get_config()
                 
                 text = "⚠️ <b>Напоминание: низкие остатки на складе</b>\n\n"
                 text += "Следующие позиции требуют пополнения:\n\n"
@@ -56,16 +58,18 @@ class AutomationService:
         """
         async with async_session_maker() as session:
             try:
+                from bot.config import get_config
+                config = get_config()
+                if config.demo_mode:
+                    return
+
                 # Получаем вчерашний день
                 yesterday = datetime.now() - timedelta(days=1)
                 start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
                 
                 # Получаем отчет за вчера
-                report = await manager_service.get_period_report(session, start_date, end_date)
-                
-                from bot.config import get_config
-                config = get_config()
+                report = await manager_service.get_period_report(session, tenant_id=0, start_date=start_date, end_date=end_date)
                 
                 date_str = yesterday.strftime("%d.%m.%Y")
                 
@@ -96,6 +100,11 @@ class AutomationService:
         """
         async with async_session_maker() as session:
             try:
+                from bot.config import get_config
+                config = get_config()
+                if config.demo_mode:
+                    return
+
                 # Получаем все новые срочные заявки
                 from sqlalchemy import select, and_
                 from sqlalchemy.orm import selectinload
@@ -107,6 +116,7 @@ class AutomationService:
                     select(Request)
                     .where(
                         and_(
+                            Request.tenant_id == 0,
                             Request.status == "new",
                             Request.priority == "urgent",
                             Request.created_at <= two_hours_ago
@@ -120,9 +130,6 @@ class AutomationService:
                 
                 if not urgent_requests:
                     return  # Нет срочных заявок старше 2 часов
-                
-                from bot.config import get_config
-                config = get_config()
                 
                 text = "🚨 <b>Внимание: срочные заявки без обработки</b>\n\n"
                 text += f"Найдено {len(urgent_requests)} срочных заявок, которые не обработаны более 2 часов:\n\n"
@@ -153,13 +160,15 @@ class AutomationService:
         """
         async with async_session_maker() as session:
             try:
-                old_requests = await manager_service.get_requests_in_work_over_days(session, days=7)
+                from bot.config import get_config
+                config = get_config()
+                if config.demo_mode:
+                    return
+
+                old_requests = await manager_service.get_requests_in_work_over_days(session, tenant_id=0, days=7)
                 
                 if not old_requests:
                     return  # Нет заявок в работе более 7 дней
-                
-                from bot.config import get_config
-                config = get_config()
                 
                 text = "⏰ <b>Внимание: заявки в работе более 7 дней</b>\n\n"
                 text += f"Найдено {len(old_requests)} заявок, которые находятся в работе более 7 дней:\n\n"

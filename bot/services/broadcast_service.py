@@ -10,13 +10,13 @@ class BroadcastService:
     
     async def get_all_employees(self, session: AsyncSession) -> List[User]:
         """
-        Получить всех сотрудников (не завхоз и не руководитель)
+        Получить всех пользователей (роль employee), исключая техника и руководителя
         
         Args:
             session: Сессия БД
             
         Returns:
-            Список сотрудников
+            Список пользователей
         """
         from bot.config import get_config
         config = get_config()

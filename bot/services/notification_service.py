@@ -53,7 +53,7 @@ class NotificationService:
     
     async def notify_warehouseman_new_request(self, request: Request):
         """
-        Уведомить завхоза о новой заявке
+        Уведомить техника о новой заявке
         
         Args:
             request: Новая заявка
@@ -70,6 +70,10 @@ class NotificationService:
         
         keyboard = get_request_actions_keyboard(request.id)
         
+        # В demo режиме не шлем уведомления на "реальные" ID,
+        # чтобы не было пересечений между тестировщиками.
+        target_warehouseman_chat_id = request.user_id if self.config.demo_mode else self.config.warehouseman_id
+
         try:
             # Получаем фото безопасным способом
             # Сначала пробуем использовать закэшированные file_ids (если есть)
@@ -96,7 +100,7 @@ class NotificationService:
             if photos:
                 # Отправляем первое фото с текстом и кнопками
                 await self.bot.send_photo(
-                    chat_id=self.config.warehouseman_id,
+                    chat_id=target_warehouseman_chat_id,
                     photo=photos[0].file_id,
                     caption=text,
                     reply_markup=keyboard,
@@ -107,20 +111,20 @@ class NotificationService:
                 if len(photos) > 1:
                     for photo in photos[1:]:
                         await self.bot.send_photo(
-                            chat_id=self.config.warehouseman_id,
+                            chat_id=target_warehouseman_chat_id,
                             photo=photo.file_id
                         )
             else:
                 # Нет фото - отправляем обычное текстовое сообщение
                 await self.bot.send_message(
-                    chat_id=self.config.warehouseman_id,
+                    chat_id=target_warehouseman_chat_id,
                     text=text,
                     reply_markup=keyboard,
                     parse_mode="HTML"
                 )
         except Exception as e:
             # Логируем ошибку, но не прерываем выполнение
-            logger.error(f"Ошибка отправки уведомления завхозу: {e}")
+            logger.error(f"Ошибка отправки уведомления технику: {e}")
     
     async def notify_manager_complaint(self, complaint: Complaint, request: Request):
         """
@@ -135,7 +139,7 @@ class NotificationService:
         # Получаем имя пользователя через Telegram API
         user_name = await self._get_user_name(complaint.user_id)
         
-        text = "⚠️ <b>Жалоба на завхоза</b>\n\n"
+        text = "⚠️ <b>Жалоба на техника</b>\n\n"
         text += f"📋 <b>Заявка:</b> {request.number}\n"
         text += format_request_short(request)
         text += f"\n\n"
@@ -144,9 +148,11 @@ class NotificationService:
         text += f"💬 <b>Текст жалобы:</b>\n{complaint.text}\n"
         text += f"\n📅 {complaint.created_at.strftime('%d.%m.%Y %H:%M')}"
         
+        target_manager_chat_id = complaint.user_id if self.config.demo_mode else self.config.manager_id
+
         try:
             await self.bot.send_message(
-                chat_id=self.config.manager_id,
+                chat_id=target_manager_chat_id,
                 text=text,
                 parse_mode="HTML"
             )
@@ -157,7 +163,7 @@ class NotificationService:
     
     async def notify_warehouseman_complaint(self, complaint: Complaint, request: Request):
         """
-        Уведомить завхоза о жалобе (копия)
+        Уведомить техника о жалобе (копия)
         
         Args:
             complaint: Жалоба
@@ -177,20 +183,22 @@ class NotificationService:
         text += f"💬 <b>Текст жалобы:</b>\n{complaint.text}\n"
         text += f"\n📅 {complaint.created_at.strftime('%d.%m.%Y %H:%M')}"
         
+        target_warehouseman_chat_id = complaint.user_id if self.config.demo_mode else self.config.warehouseman_id
+
         try:
             await self.bot.send_message(
-                chat_id=self.config.warehouseman_id,
+                chat_id=target_warehouseman_chat_id,
                 text=text,
                 parse_mode="HTML"
             )
-            logger.debug(f"Уведомление завхозу отправлено: жалоба ID={complaint.id}")
+            logger.debug(f"Уведомление технику отправлено: жалоба ID={complaint.id}")
         except Exception as e:
-            logger.error(f"Ошибка отправки уведомления завхозу о жалобе: {e}")
+            logger.error(f"Ошибка отправки уведомления технику о жалобе: {e}")
             # Не прерываем выполнение - жалоба уже создана
     
     async def notify_employee_request_status_changed(self, request: Request, status_text: str):
         """
-        Уведомить сотрудника об изменении статуса заявки
+        Уведомить пользователя об изменении статуса заявки
         
         Args:
             request: Заявка
@@ -212,5 +220,5 @@ class NotificationService:
                 parse_mode="HTML"
             )
         except Exception as e:
-            print(f"Ошибка отправки уведомления сотруднику: {e}")
+            print(f"Ошибка отправки уведомления пользователю: {e}")
 

@@ -1,4 +1,4 @@
-"""Обработчики для завхоза"""
+"""Обработчики для техника"""
 from typing import Optional
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -53,11 +53,11 @@ async def get_users_info_map(bot, user_ids: set[int]) -> dict[int, tuple[str, st
 
 
 @router.message(F.text == "Все заявки")
-async def show_all_requests(message: Message, db_session, bot):
+async def show_all_requests(message: Message, tenant_id: int, db_session, bot):
     """Показать все заявки с кнопками для просмотра деталей"""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    requests = await warehouseman_service.get_all_requests(db_session, limit=20)  # Последние 20 заявок
+    requests = await warehouseman_service.get_all_requests(db_session, tenant_id=tenant_id, limit=20)  # Последние 20 заявок
     
     if not requests:
         await message.answer("📋 Заявок пока нет.")
@@ -99,13 +99,13 @@ async def show_all_requests(message: Message, db_session, bot):
 # ==================== ПРОСМОТР ДЕТАЛЕЙ ЗАЯВКИ ====================
 
 @router.callback_query(F.data.startswith("warehouseman_view_"))
-async def view_request_details(callback: CallbackQuery, db_session, bot):
-    """Просмотр деталей заявки завхозом"""
+async def view_request_details(callback: CallbackQuery, tenant_id: int, db_session, bot):
+    """Просмотр деталей заявки техником"""
     await callback.answer()
     
     request_id = int(callback.data.split("_")[-1])
     
-    request = await request_service.get_request_by_id(db_session, request_id)
+    request = await request_service.get_request_by_id(db_session, tenant_id=tenant_id, request_id=request_id)
     
     if not request:
         await callback.message.answer("❌ Заявка не найдена.")
@@ -160,11 +160,11 @@ async def view_request_details(callback: CallbackQuery, db_session, bot):
 # ==================== ЗАЯВКИ ЗА СЕГОДНЯ ====================
 
 @router.message(F.text == "Все заявки за сегодня")
-async def show_requests_today(message: Message, db_session, bot):
+async def show_requests_today(message: Message, tenant_id: int, db_session, bot):
     """Показать все заявки за сегодня с кнопками для просмотра"""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    requests = await warehouseman_service.get_requests_today(db_session)
+    requests = await warehouseman_service.get_requests_today(db_session, tenant_id=tenant_id)
     
     if not requests:
         await message.answer("📋 Заявок за сегодня нет.")
@@ -206,11 +206,11 @@ async def show_requests_today(message: Message, db_session, bot):
 # ==================== ЗАЯВКИ ЗА НЕДЕЛЮ ====================
 
 @router.message(F.text == "Все заявки за неделю")
-async def show_requests_week(message: Message, db_session, bot):
+async def show_requests_week(message: Message, tenant_id: int, db_session, bot):
     """Показать все заявки за неделю с кнопками для просмотра"""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
-    requests = await warehouseman_service.get_requests_week(db_session)
+    requests = await warehouseman_service.get_requests_week(db_session, tenant_id=tenant_id)
     
     if not requests:
         await message.answer("📋 Заявок за неделю нет.")
@@ -252,17 +252,17 @@ async def show_requests_week(message: Message, db_session, bot):
 # ==================== ДЕЙСТВИЯ С ЗАЯВКАМИ ====================
 
 @router.callback_query(F.data.startswith("request_take_"))
-async def take_request_in_work(callback: CallbackQuery, db_session, bot):
+async def take_request_in_work(callback: CallbackQuery, tenant_id: int, db_session, bot):
     """Взять заявку в работу"""
     request_id = int(callback.data.split("_")[-1])
     
-    request = await warehouseman_service.take_request_in_work(db_session, request_id)
+    request = await warehouseman_service.take_request_in_work(db_session, tenant_id=tenant_id, request_id=request_id)
     
     if not request:
         await callback.answer("❌ Не удалось взять заявку в работу", show_alert=True)
         return
     
-    # Уведомляем сотрудника
+    # Уведомляем пользователя
     from bot.services.notification_service import NotificationService
     notification_service = NotificationService(bot)
     await notification_service.notify_employee_request_status_changed(request, "В работе")
@@ -297,16 +297,17 @@ async def take_request_in_work(callback: CallbackQuery, db_session, bot):
 
 
 @router.callback_query(F.data.startswith("request_complete_"))
-async def complete_request(callback: CallbackQuery, db_session, bot, state: FSMContext):
+async def complete_request(callback: CallbackQuery, tenant_id: int, db_session, bot, state: FSMContext):
     """Завершить заявку"""
     from bot.services.warehouse_service import warehouse_service
     from bot.keyboards.warehouse import get_writeoff_item_keyboard
     from bot.states.warehouse_management import WarehouseManagementStates
+    from bot.keyboards.warehouseman import get_warehouseman_keyboard
     
     request_id = int(callback.data.split("_")[-1])
     
     # Проверяем, есть ли позиции на складе для списания
-    items = await warehouse_service.get_all_items(db_session)
+    items = await warehouse_service.get_all_items(db_session, tenant_id=tenant_id)
     
     if items:
         # Предлагаем списать со склада
@@ -325,13 +326,13 @@ async def complete_request(callback: CallbackQuery, db_session, bot, state: FSMC
         await callback.answer()
     else:
         # Нет позиций на складе, просто завершаем заявку
-        request = await warehouseman_service.complete_request(db_session, request_id)
+        request = await warehouseman_service.complete_request(db_session, tenant_id=tenant_id, request_id=request_id)
         
         if not request:
             await callback.answer("❌ Не удалось завершить заявку", show_alert=True)
             return
         
-        # Уведомляем сотрудника
+        # Уведомляем пользователя
         notification_service = NotificationService(bot)
         await notification_service.notify_employee_request_status_changed(request, "Выполнено")
         
@@ -356,6 +357,12 @@ async def complete_request(callback: CallbackQuery, db_session, bot, state: FSMC
                 request_text,
                 parse_mode="HTML"
             )
+        
+        # Возвращаем меню
+        await callback.message.answer(
+            "Выберите действие:",
+            reply_markup=get_warehouseman_keyboard(is_manager=False)
+        )
         
         await callback.answer("✅ Заявка выполнена")
 
@@ -382,7 +389,7 @@ async def start_reject_request(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(WarehousemanActionStates.waiting_for_rejection_reason)
-async def process_rejection_reason(message: Message, state: FSMContext, db_session, bot):
+async def process_rejection_reason(message: Message, state: FSMContext, tenant_id: int, db_session, bot, base_role: str):
     """Обработка причины отклонения"""
     from bot.states.warehouseman_actions import WarehousemanActionStates
     
@@ -401,71 +408,67 @@ async def process_rejection_reason(message: Message, state: FSMContext, db_sessi
         await state.clear()
         return
     
-    # Отклоняем заявку
-    request = await warehouseman_service.reject_request(db_session, request_id, reason)
+    # Отклоняем заявку (tenant isolation)
+    request = await warehouseman_service.reject_request(db_session, tenant_id=tenant_id, request_id=request_id, reason=reason)
     
     if not request:
         await message.answer("❌ Не удалось отклонить заявку.")
         await state.clear()
         return
     
-    # Уведомляем сотрудника
+    # Уведомляем пользователя
     notification_service = NotificationService(bot)
     await notification_service.notify_employee_request_status_changed(request, "Отклонено")
     
     await message.answer(
         f"✅ Заявка {request.number} отклонена.\n"
-        f"Сотрудник получил уведомление.",
-        reply_markup=get_warehouseman_keyboard()
+        f"Пользователь получил уведомление.",
+        reply_markup=get_warehouseman_keyboard(is_manager=(base_role == "manager"))
     )
     
     await state.clear()
 
 
 @router.callback_query(F.data.startswith("request_message_"))
-async def start_message_to_employee(callback: CallbackQuery, state: FSMContext):
-    """Начало отправки сообщения сотруднику"""
+async def start_message_to_employee(callback: CallbackQuery, state: FSMContext, tenant_id: int, db_session, bot):
+    """Начало отправки сообщения пользователю"""
     from bot.states.warehouseman_actions import WarehousemanActionStates
     
     request_id = int(callback.data.split("_")[-1])
     
-    # Получаем заявку для информации о сотруднике
-    from bot.services.request_service import request_service
-    from bot.database.engine import async_session_maker
+    # Получаем заявку для информации о пользователе (tenant isolation)
+    request = await request_service.get_request_by_id(db_session, tenant_id=tenant_id, request_id=request_id)
     
-    async with async_session_maker() as session:
-        request = await request_service.get_request_by_id(session, request_id)
+    if not request:
+        await callback.answer("Заявка не найдена", show_alert=True)
+        return
     
-        if not request:
-            await callback.answer("Заявка не найдена", show_alert=True)
-            return
-        
-        # Сохраняем ID заявки и ID сотрудника в состоянии
-        await state.update_data(request_id=request_id, employee_id=request.user_id)
-        await state.set_state(WarehousemanActionStates.waiting_for_message_to_employee)
-        
-        # Получаем имя пользователя через Telegram API
-        try:
-            chat = await bot.get_chat(request.user_id)
-            user_name = chat.first_name or chat.username or f"ID: {request.user_id}"
-        except:
-            user_name = f"ID: {request.user_id}"
-        
-        await callback.message.answer(
-            f"💬 <b>Написать сотруднику</b>\n\n"
-            f"Заявка: <b>{request.number}</b>\n"
-            f"Сотрудник: <b>{user_name}</b>\n\n"
-            "Напишите ваше сообщение:",
-            reply_markup=get_cancel_keyboard(),
-            parse_mode="HTML"
-        )
-        
-        await callback.answer()
+    # Сохраняем ID заявки и ID пользователя в состоянии
+    await state.update_data(request_id=request_id, employee_id=request.user_id)
+    await state.set_state(WarehousemanActionStates.waiting_for_message_to_employee)
+    
+    # Получаем имя пользователя через Telegram API
+    try:
+        chat = await bot.get_chat(request.user_id)
+        user_name = chat.first_name or chat.username or f"ID: {request.user_id}"
+    except:
+        user_name = f"ID: {request.user_id}"
+    
+    await callback.message.answer(
+        f"💬 <b>Написать пользователю</b>\n\n"
+        f"Заявка: <b>{request.number}</b>\n"
+        f"Пользователь: <b>{user_name}</b>\n\n"
+        "Напишите ваше сообщение:",
+        reply_markup=get_cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    
+    await callback.answer()
 
 
 @router.message(WarehousemanActionStates.waiting_for_message_to_employee)
-async def send_message_to_employee(message: Message, state: FSMContext, bot):
-    """Отправка сообщения сотруднику"""
+async def send_message_to_employee(message: Message, state: FSMContext, tenant_id: int, bot, base_role: str):
+    """Отправка сообщения пользователю"""
     from bot.states.warehouseman_actions import WarehousemanActionStates
     
     # Получаем данные из состояния
@@ -478,21 +481,18 @@ async def send_message_to_employee(message: Message, state: FSMContext, bot):
         await state.clear()
         return
     
-    # Получаем заявку для информации
-    from bot.services.request_service import request_service
-    from sqlalchemy.ext.asyncio import AsyncSession
+    # Получаем заявку для информации (tenant isolation)
     from bot.database.engine import async_session_maker
-    
     async with async_session_maker() as session:
-        request = await request_service.get_request_by_id(session, request_id)
+        request = await request_service.get_request_by_id(session, tenant_id=tenant_id, request_id=request_id)
         
         if not request:
             await message.answer("❌ Заявка не найдена.")
             await state.clear()
             return
         
-        # Формируем сообщение для сотрудника
-        text = f"💬 <b>Сообщение от завхоза</b>\n\n"
+        # Формируем сообщение для пользователя
+        text = f"💬 <b>Сообщение от техника</b>\n\n"
         text += f"📋 <b>По заявке:</b> {request.number}\n"
         text += f"💬 <b>Сообщение:</b>\n{message.text}"
         
@@ -504,15 +504,15 @@ async def send_message_to_employee(message: Message, state: FSMContext, bot):
             )
             
             await message.answer(
-                "✅ Сообщение отправлено сотруднику!",
-                reply_markup=get_warehouseman_keyboard()
+                "✅ Сообщение отправлено пользователю!",
+                reply_markup=get_warehouseman_keyboard(is_manager=(base_role == "manager"))
             )
             
             await state.clear()
         except Exception as e:
             await message.answer(
                 f"❌ Ошибка при отправке сообщения: {e}",
-                reply_markup=get_warehouseman_keyboard()
+                reply_markup=get_warehouseman_keyboard(is_manager=(base_role == "manager"))
             )
             await state.clear()
 
@@ -520,14 +520,14 @@ async def send_message_to_employee(message: Message, state: FSMContext, bot):
 # ==================== ОТМЕНА ДЕЙСТВИЙ ====================
 
 @router.callback_query(F.data == "cancel")
-async def cancel_warehouseman_action(callback: CallbackQuery, state: FSMContext):
-    """Отмена действия завхоза"""
+async def cancel_warehouseman_action(callback: CallbackQuery, state: FSMContext, base_role: str):
+    """Отмена действия техника"""
     await state.clear()
     
     await callback.message.edit_text("❌ Действие отменено.")
     await callback.message.answer(
         "Выберите действие:",
-        reply_markup=get_warehouseman_keyboard()
+        reply_markup=get_warehouseman_keyboard(is_manager=(base_role == "manager"))
     )
     
     await callback.answer("Отменено")

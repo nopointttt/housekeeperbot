@@ -11,7 +11,7 @@ from bot.utils.request_helpers import generate_request_number
 class RequestService:
     """Сервис для управления заявками"""
     
-    async def generate_request_number(self, session: AsyncSession) -> str:
+    async def generate_request_number(self, session: AsyncSession, tenant_id: int) -> str:
         """
         Сгенерировать уникальный номер заявки ЗХ-ДДММГГ-№№№
         
@@ -37,6 +37,7 @@ class RequestService:
             result = await session.execute(
                 select(func.count(Request.id))
                 .where(Request.created_at >= today_start)
+                .where(Request.tenant_id == tenant_id)
                 .where(Request.number.like(f"{date_prefix}-%"))
             )
             
@@ -64,6 +65,7 @@ class RequestService:
     async def create_request(
         self,
         session: AsyncSession,
+        tenant_id: int,
         user_id: int,
         category: str,
         description: str,
@@ -87,10 +89,11 @@ class RequestService:
             Созданная заявка
         """
         # Генерируем номер
-        number = await self.generate_request_number(session)
+        number = await self.generate_request_number(session, tenant_id=tenant_id)
         
         # Создаем заявку
         request = Request(
+            tenant_id=tenant_id,
             number=number,
             user_id=user_id,
             category=category,
@@ -135,6 +138,7 @@ class RequestService:
     async def get_user_requests(
         self,
         session: AsyncSession,
+        tenant_id: int,
         user_id: int,
         limit: Optional[int] = None
     ) -> list[Request]:
@@ -151,6 +155,7 @@ class RequestService:
         """
         query = (
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .where(Request.user_id == user_id)
             .options(selectinload(Request.photos))
             .order_by(Request.created_at.desc())
@@ -165,6 +170,7 @@ class RequestService:
     async def get_request_by_id(
         self,
         session: AsyncSession,
+        tenant_id: int,
         request_id: int,
         load_user: bool = True,
         load_photos: bool = True
@@ -178,7 +184,11 @@ class RequestService:
             load_user: Загружать связанного пользователя (по умолчанию True)
             load_photos: Загружать фото (по умолчанию True)
         """
-        query = select(Request).where(Request.id == request_id)
+        query = (
+            select(Request)
+            .where(Request.id == request_id)
+            .where(Request.tenant_id == tenant_id)
+        )
         
         # Оптимизация: загружаем только то, что нужно
         options = []

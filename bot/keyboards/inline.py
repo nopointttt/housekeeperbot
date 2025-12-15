@@ -5,7 +5,7 @@ from typing import Optional
 
 def get_request_actions_keyboard(request_id: int) -> InlineKeyboardMarkup:
     """
-    Получить inline клавиатуру с действиями для заявки (для завхоза)
+    Получить inline клавиатуру с действиями для заявки (для техника)
     
     Args:
         request_id: ID заявки
@@ -18,7 +18,7 @@ def get_request_actions_keyboard(request_id: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="Отклонить", callback_data=f"request_reject_{request_id}"),
-                InlineKeyboardButton(text="Написать сотруднику", callback_data=f"request_message_{request_id}"),
+                InlineKeyboardButton(text="Написать пользователю", callback_data=f"request_message_{request_id}"),
             ],
         ]
     )
@@ -27,7 +27,7 @@ def get_request_actions_keyboard(request_id: int) -> InlineKeyboardMarkup:
 
 def get_complaint_button_keyboard(request_id: int) -> InlineKeyboardMarkup:
     """
-    Получить inline клавиатуру с кнопкой жалобы (для сотрудника)
+    Получить inline клавиатуру с кнопкой жалобы (для пользователя)
     
     Args:
         request_id: ID заявки

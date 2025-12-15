@@ -51,13 +51,13 @@ async def get_users_info_map(bot, user_ids: set[int]) -> dict[int, tuple[str, st
 
 
 @router.message(F.text == "Все заявки")
-async def show_all_requests(message: Message, user_role: str, db_session, bot):
+async def show_all_requests(message: Message, user_role: str, tenant_id: int, db_session, bot):
     """Показать все заявки с кнопками для просмотра деталей"""
     if user_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
     
-    requests = await manager_service.get_all_requests(db_session, limit=20)  # Последние 20 заявок
+    requests = await manager_service.get_all_requests(db_session, tenant_id=tenant_id, limit=20)  # Последние 20 заявок
     
     if not requests:
         await message.answer("📋 Заявок пока нет.", parse_mode="HTML")
@@ -97,13 +97,13 @@ async def show_all_requests(message: Message, user_role: str, db_session, bot):
 
 
 @router.callback_query(F.data.startswith("manager_view_"))
-async def manager_view_request_details(callback: CallbackQuery, db_session, bot):
+async def manager_view_request_details(callback: CallbackQuery, tenant_id: int, db_session, bot):
     """Просмотр деталей заявки руководителем"""
     await callback.answer()
     
     request_id = int(callback.data.split("_")[-1])
     
-    request = await request_service.get_request_by_id(db_session, request_id, load_user=True, load_photos=True)
+    request = await request_service.get_request_by_id(db_session, tenant_id=tenant_id, request_id=request_id, load_user=True, load_photos=True)
     
     if not request:
         await callback.message.answer("❌ Заявка не найдена.")
@@ -151,13 +151,13 @@ async def manager_view_request_details(callback: CallbackQuery, db_session, bot)
 
 
 @router.message(F.text == "Заявки за сегодня")
-async def show_requests_today(message: Message, user_role: str, db_session, bot):
+async def show_requests_today(message: Message, user_role: str, tenant_id: int, db_session, bot):
     """Показать заявки за сегодня"""
     if user_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
     
-    requests = await manager_service.get_requests_today(db_session)
+    requests = await manager_service.get_requests_today(db_session, tenant_id=tenant_id)
     
     if not requests:
         await message.answer(
@@ -200,13 +200,13 @@ async def show_requests_today(message: Message, user_role: str, db_session, bot)
 
 
 @router.message(F.text == "Заявки за неделю")
-async def show_requests_week(message: Message, user_role: str, db_session, bot):
+async def show_requests_week(message: Message, user_role: str, tenant_id: int, db_session, bot):
     """Показать заявки за неделю"""
     if user_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
     
-    requests = await manager_service.get_requests_week(db_session)
+    requests = await manager_service.get_requests_week(db_session, tenant_id=tenant_id)
     
     if not requests:
         await message.answer(
@@ -249,13 +249,13 @@ async def show_requests_week(message: Message, user_role: str, db_session, bot):
 
 
 @router.message(F.text == "В работе > 3 дней")
-async def show_requests_over_3_days(message: Message, user_role: str, db_session, bot):
+async def show_requests_over_3_days(message: Message, user_role: str, tenant_id: int, db_session, bot):
     """Показать заявки в работе более 3 дней"""
     if user_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
     
-    requests = await manager_service.get_requests_in_work_over_days(db_session, days=3)
+    requests = await manager_service.get_requests_in_work_over_days(db_session, tenant_id=tenant_id, days=3)
     
     if not requests:
         await message.answer(
@@ -302,13 +302,13 @@ async def show_requests_over_3_days(message: Message, user_role: str, db_session
 
 
 @router.message(F.text == "В работе > 7 дней")
-async def show_requests_over_7_days(message: Message, user_role: str, db_session, bot):
+async def show_requests_over_7_days(message: Message, user_role: str, tenant_id: int, db_session, bot):
     """Показать заявки в работе более 7 дней"""
     if user_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
     
-    requests = await manager_service.get_requests_in_work_over_days(db_session, days=7)
+    requests = await manager_service.get_requests_in_work_over_days(db_session, tenant_id=tenant_id, days=7)
     
     if not requests:
         await message.answer(
@@ -407,7 +407,7 @@ async def process_start_date(message: Message, state: FSMContext):
 
 
 @router.message(PeriodReportStates.waiting_for_end_date)
-async def process_end_date(message: Message, state: FSMContext, db_session):
+async def process_end_date(message: Message, state: FSMContext, tenant_id: int, db_session):
     """Обработка конечной даты и генерация отчета"""
     text = message.text.strip().lower()
     
@@ -439,7 +439,7 @@ async def process_end_date(message: Message, state: FSMContext, db_session):
         return
     
     # Получаем отчет
-    report = await manager_service.get_period_report(db_session, start_date, end_date)
+    report = await manager_service.get_period_report(db_session, tenant_id=tenant_id, start_date=start_date, end_date=end_date)
     
     # Форматируем даты для отображения
     start_str = start_date.strftime("%d.%m.%Y")
@@ -459,9 +459,9 @@ async def process_end_date(message: Message, state: FSMContext, db_session):
     await message.answer(report_text, parse_mode="HTML")
 
 
-@router.message(F.text == "Жалобы на завхоза")
-async def show_complaints(message: Message, user_role: str, db_session):
-    """Показать все жалобы на завхоза"""
+@router.message(F.text == "Жалобы на техника")
+async def show_complaints(message: Message, user_role: str, tenant_id: int, db_session):
+    """Показать все жалобы на техника"""
     import logging
     logger = logging.getLogger(__name__)
     
@@ -470,18 +470,18 @@ async def show_complaints(message: Message, user_role: str, db_session):
         return
     
     logger.debug(f"Руководитель запросил список жалоб, user_role={user_role}")
-    complaints = await manager_service.get_all_complaints(db_session)
+    complaints = await manager_service.get_all_complaints(db_session, tenant_id=tenant_id)
     logger.debug(f"Получено жалоб: {len(complaints)}")
     
     if not complaints:
         await message.answer(
-            "📝 <b>Жалобы на завхоза</b>\n\n"
+            "📝 <b>Жалобы на техника</b>\n\n"
             "Жалоб нет.",
             parse_mode="HTML"
         )
         return
     
-    text = f"📝 <b>Жалобы на завхоза</b>\n\n"
+    text = f"📝 <b>Жалобы на техника</b>\n\n"
     text += f"Всего жалоб: {len(complaints)}\n\n"
     
     for complaint in complaints:
@@ -511,9 +511,9 @@ async def show_complaints(message: Message, user_role: str, db_session):
         await message.answer(text, parse_mode="HTML")
 
 
-@router.message(F.text == "Зайти как сотрудник")
+@router.message(F.text == "Зайти как пользователь")
 async def switch_to_employee_role(message: Message, base_role: str, user_id: int, db_session, telegram_user):
-    """Переключиться на роль сотрудника"""
+    """Переключиться на роль пользователя"""
     if base_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
@@ -522,16 +522,16 @@ async def switch_to_employee_role(message: Message, base_role: str, user_id: int
     success = await role_service.switch_role(db_session, user_id, "employee")
     
     if success:
-        # Получаем клавиатуру сотрудника (передаем is_manager=True для показа кнопки возврата)
+        # Получаем клавиатуру пользователя (передаем is_manager=True для показа кнопки "Зайти как руководитель")
         from bot.keyboards.employee import get_employee_keyboard
         
         await message.answer(
-            "✅ Вы переключились на роль <b>Сотрудник</b>.\n\n"
+            "✅ Вы переключились на роль <b>Пользователь</b>.\n\n"
             "Теперь вы можете:\n"
             "• Создавать заявки\n"
             "• Просматривать свои заявки\n"
-            "• Связаться с завхозом\n\n"
-            "Используйте кнопку 'Вернуться к роли руководителя' чтобы вернуться обратно.",
+            "• Связаться с техником\n\n"
+            "Используйте кнопку 'Зайти как руководитель', чтобы вернуться обратно.",
             reply_markup=get_employee_keyboard(is_manager=True),
             parse_mode="HTML"
         )
@@ -539,9 +539,9 @@ async def switch_to_employee_role(message: Message, base_role: str, user_id: int
         await message.answer("❌ Ошибка при переключении роли.")
 
 
-@router.message(F.text == "Зайти как завхоз")
+@router.message(F.text == "Зайти как техник")
 async def switch_to_warehouseman_role(message: Message, base_role: str, user_id: int, db_session, telegram_user):
-    """Переключиться на роль завхоза"""
+    """Переключиться на роль техника"""
     if base_role != "manager":
         await message.answer("❌ У вас нет доступа к этой функции.")
         return
@@ -550,16 +550,16 @@ async def switch_to_warehouseman_role(message: Message, base_role: str, user_id:
     success = await role_service.switch_role(db_session, user_id, "warehouseman")
     
     if success:
-        # Получаем клавиатуру завхоза (передаем is_manager=True для показа кнопки возврата)
+        # Получаем клавиатуру техника (передаем is_manager=True для показа кнопки "Зайти как руководитель")
         from bot.keyboards.warehouseman import get_warehouseman_keyboard
         
         await message.answer(
-            "✅ Вы переключились на роль <b>Завхоз</b>.\n\n"
+            "✅ Вы переключились на роль <b>Техник</b>.\n\n"
             "Теперь вы можете:\n"
             "• Управлять заявками\n"
             "• Работать со складом\n"
-            "• Делать рассылки сотрудникам\n\n"
-            "Используйте кнопку 'Вернуться к роли руководителя' чтобы вернуться обратно.",
+            "• Делать рассылки пользователям\n\n"
+            "Используйте кнопку 'Зайти как руководитель', чтобы вернуться обратно.",
             reply_markup=get_warehouseman_keyboard(is_manager=True),
             parse_mode="HTML"
         )

@@ -30,7 +30,7 @@ async def process_writeoff_item(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "writeoff_cancel")
-async def cancel_writeoff(callback: CallbackQuery, state: FSMContext, db_session, bot):
+async def cancel_writeoff(callback: CallbackQuery, state: FSMContext, db_session, bot, base_role: str):
     """Отмена списания, просто завершаем заявку"""
     data = await state.get_data()
     request_id = data.get("request_id")
@@ -48,7 +48,7 @@ async def cancel_writeoff(callback: CallbackQuery, state: FSMContext, db_session
         await state.clear()
         return
     
-    # Уведомляем сотрудника
+    # Уведомляем пользователя
     notification_service = NotificationService(bot)
     await notification_service.notify_employee_request_status_changed(request, "Выполнено")
     
@@ -62,7 +62,7 @@ async def cancel_writeoff(callback: CallbackQuery, state: FSMContext, db_session
 
 
 @router.message(WarehouseManagementStates.waiting_for_writeoff_quantity)
-async def process_writeoff_quantity(message: Message, state: FSMContext, db_session, bot):
+async def process_writeoff_quantity(message: Message, state: FSMContext, db_session, bot, base_role: str):
     """Обработка количества для списания"""
     try:
         quantity = int(message.text.strip())
@@ -113,7 +113,7 @@ async def process_writeoff_quantity(message: Message, state: FSMContext, db_sess
             await state.clear()
             return
         
-        # Уведомляем сотрудника
+        # Уведомляем пользователя
         notification_service = NotificationService(bot)
         await notification_service.notify_employee_request_status_changed(request, "Выполнено")
         
@@ -121,7 +121,7 @@ async def process_writeoff_quantity(message: Message, state: FSMContext, db_sess
             f"✅ Заявка {request.number} завершена!\n"
             f"✅ Со склада списано: {item.name} - {quantity} шт.\n"
             f"Остаток на складе: {item.current_quantity} шт.",
-            reply_markup=get_warehouseman_keyboard()
+            reply_markup=get_warehouseman_keyboard(is_manager=(base_role == "manager"))
         )
         
         await state.clear()

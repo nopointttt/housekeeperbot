@@ -2,7 +2,7 @@
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from bot.database.models import User
+from bot.database.models import User, TechnicianAssignment
 from bot.config import get_config
 
 
@@ -41,8 +41,20 @@ class RoleService:
         Returns:
             Объект User
         """
+        # Сначала проверяем, назначен ли пользователь техником (приоритетно)
+        tech_assignment = None
+        if self.config.demo_mode:
+            result_tech = await session.execute(
+                select(TechnicianAssignment).where(TechnicianAssignment.technician_id == user_id)
+            )
+            tech_assignment = result_tech.scalar_one_or_none()
+        
         # Определяем роль
-        role = self.get_role_by_id(user_id)
+        if tech_assignment:
+            # Если назначен техником - роль warehouseman (приоритетно)
+            role = "warehouseman"
+        else:
+            role = self.get_role_by_id(user_id)
         
         # Ищем пользователя в БД
         result = await session.execute(
@@ -57,11 +69,21 @@ class RoleService:
             await session.commit()
             await session.refresh(user)
         else:
-            # Обновляем роль на случай, если ID изменился в конфиге
-            if user.role != role:
-                user.role = role
-                await session.commit()
-                await session.refresh(user)
+            # Обновляем роль: если назначен техником - принудительно warehouseman
+            # Если не назначен техником - используем стандартную логику
+            if tech_assignment:
+                # Принудительно устанавливаем роль warehouseman для техника
+                if user.role != "warehouseman":
+                    user.role = "warehouseman"
+                    user.active_role = None  # Сбрасываем active_role, т.к. техник не может быть менеджером
+                    await session.commit()
+                    await session.refresh(user)
+            else:
+                # Стандартная логика обновления роли
+                if user.role != role:
+                    user.role = role
+                    await session.commit()
+                    await session.refresh(user)
         
         return user
     
@@ -81,11 +103,11 @@ class RoleService:
         return user.role == role
     
     async def is_employee(self, session: AsyncSession, user_id: int) -> bool:
-        """Проверить, является ли пользователь сотрудником"""
+        """Проверить, является ли пользователь в роли 'пользователь' (employee)"""
         return await self.is_role(session, user_id, "employee")
     
     async def is_warehouseman(self, session: AsyncSession, user_id: int) -> bool:
-        """Проверить, является ли пользователь завхозом"""
+        """Проверить, является ли пользователь в роли 'техник' (warehouseman)"""
         return await self.is_role(session, user_id, "warehouseman")
     
     async def is_manager(self, session: AsyncSession, user_id: int) -> bool:
@@ -96,6 +118,7 @@ class RoleService:
         """
         Получить активную роль пользователя.
         Для менеджера возвращает active_role если установлена, иначе базовую роль.
+        Для техника (назначенного) - всегда возвращает warehouseman (не может быть менеджером).
         Для остальных - базовую роль.
         
         Args:
@@ -105,6 +128,16 @@ class RoleService:
         Returns:
             Активная роль пользователя
         """
+        # Проверяем, назначен ли пользователь техником (приоритетно)
+        if self.config.demo_mode:
+            result_tech = await session.execute(
+                select(TechnicianAssignment).where(TechnicianAssignment.technician_id == user_id)
+            )
+            tech_assignment = result_tech.scalar_one_or_none()
+            if tech_assignment:
+                # Техник всегда работает как техник, не может быть менеджером
+                return "warehouseman"
+        
         user = await self.get_or_create_user(session, user_id)
         
         # Если пользователь - менеджер и у него установлена active_role

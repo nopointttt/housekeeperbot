@@ -1,4 +1,4 @@
-"""Сервис для работы завхоза с заявками"""
+"""Сервис для работы техника с заявками"""
 from typing import Optional
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,9 +8,9 @@ from bot.database.models import Request
 
 
 class WarehousemanService:
-    """Сервис для управления заявками завхозом"""
+    """Сервис для управления заявками техником"""
     
-    async def get_new_requests_count(self, session: AsyncSession) -> int:
+    async def get_new_requests_count(self, session: AsyncSession, tenant_id: int) -> int:
         """
         Получить количество новых заявок
         
@@ -23,10 +23,11 @@ class WarehousemanService:
         result = await session.execute(
             select(func.count(Request.id))
             .where(Request.status == "new")
+            .where(Request.tenant_id == tenant_id)
         )
         return result.scalar() or 0
     
-    async def get_new_requests(self, session: AsyncSession) -> list[Request]:
+    async def get_new_requests(self, session: AsyncSession, tenant_id: int) -> list[Request]:
         """
         Получить все новые заявки
         
@@ -39,6 +40,7 @@ class WarehousemanService:
         result = await session.execute(
             select(Request)
             .where(Request.status == "new")
+            .where(Request.tenant_id == tenant_id)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(
                 Request.priority.desc(),  # Сначала срочные
@@ -47,7 +49,7 @@ class WarehousemanService:
         )
         return list(result.scalars().all())
     
-    async def get_requests_today(self, session: AsyncSession) -> list[Request]:
+    async def get_requests_today(self, session: AsyncSession, tenant_id: int) -> list[Request]:
         """
         Получить все заявки за сегодня
         
@@ -61,13 +63,14 @@ class WarehousemanService:
         
         result = await session.execute(
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .where(Request.created_at >= today_start)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(Request.created_at.desc())
         )
         return list(result.scalars().all())
     
-    async def get_requests_week(self, session: AsyncSession) -> list[Request]:
+    async def get_requests_week(self, session: AsyncSession, tenant_id: int) -> list[Request]:
         """
         Получить все заявки за неделю
         
@@ -81,13 +84,14 @@ class WarehousemanService:
         
         result = await session.execute(
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .where(Request.created_at >= week_start)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(Request.created_at.desc())
         )
         return list(result.scalars().all())
     
-    async def get_all_requests(self, session: AsyncSession, limit: Optional[int] = None) -> list[Request]:
+    async def get_all_requests(self, session: AsyncSession, tenant_id: int, limit: Optional[int] = None) -> list[Request]:
         """
         Получить все заявки
         
@@ -100,6 +104,7 @@ class WarehousemanService:
         """
         query = (
             select(Request)
+            .where(Request.tenant_id == tenant_id)
             .options(selectinload(Request.user), selectinload(Request.photos))
             .order_by(
                 Request.priority.desc(),  # Сначала срочные
@@ -116,6 +121,7 @@ class WarehousemanService:
     async def take_request_in_work(
         self,
         session: AsyncSession,
+        tenant_id: int,
         request_id: int
     ) -> Optional[Request]:
         """
@@ -128,7 +134,10 @@ class WarehousemanService:
         Returns:
             Обновленная заявка или None
         """
-        request = await session.get(Request, request_id)
+        result = await session.execute(
+            select(Request).where(Request.id == request_id).where(Request.tenant_id == tenant_id)
+        )
+        request = result.scalar_one_or_none()
         
         if not request:
             return None
@@ -148,6 +157,7 @@ class WarehousemanService:
     async def complete_request(
         self,
         session: AsyncSession,
+        tenant_id: int,
         request_id: int
     ) -> Optional[Request]:
         """
@@ -160,7 +170,10 @@ class WarehousemanService:
         Returns:
             Обновленная заявка или None
         """
-        request = await session.get(Request, request_id)
+        result = await session.execute(
+            select(Request).where(Request.id == request_id).where(Request.tenant_id == tenant_id)
+        )
+        request = result.scalar_one_or_none()
         
         if not request:
             return None
@@ -181,6 +194,7 @@ class WarehousemanService:
     async def reject_request(
         self,
         session: AsyncSession,
+        tenant_id: int,
         request_id: int,
         reason: str
     ) -> Optional[Request]:
@@ -195,7 +209,10 @@ class WarehousemanService:
         Returns:
             Обновленная заявка или None
         """
-        request = await session.get(Request, request_id)
+        result = await session.execute(
+            select(Request).where(Request.id == request_id).where(Request.tenant_id == tenant_id)
+        )
+        request = result.scalar_one_or_none()
         
         if not request:
             return None

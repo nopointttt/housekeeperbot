@@ -55,7 +55,7 @@ async def main():
     dp.callback_query.middleware(RoleMiddleware())
     
     # Регистрация routers (handlers)
-    from bot.handlers import start, common, settings, request_creation, employee, complaints, warehouseman, warehouse, warehouse_writeoff, broadcast, manager
+    from bot.handlers import start, common, settings, request_creation, employee, complaints, warehouseman, warehouse, warehouse_writeoff, broadcast, manager, technicians
     
     dp.include_router(start.router)
     dp.include_router(common.router)
@@ -68,6 +68,7 @@ async def main():
     dp.include_router(warehouse_writeoff.router)
     dp.include_router(broadcast.router)
     dp.include_router(manager.router)
+    dp.include_router(technicians.router)
     
     # Запуск планировщика задач
     from bot.services.scheduler import TaskScheduler

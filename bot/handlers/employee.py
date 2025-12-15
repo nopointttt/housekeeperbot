@@ -1,4 +1,4 @@
-"""Обработчики для сотрудников"""
+"""Обработчики для пользователей"""
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -15,12 +15,13 @@ router = Router(name="employee")
 # ==================== МОИ ЗАЯВКИ ====================
 
 @router.message(F.text == "Мои заявки")
-async def show_my_requests(message: Message, user_id: int, db_session):
-    """Показать список заявок сотрудника"""
+async def show_my_requests(message: Message, user_id: int, tenant_id: int, db_session):
+    """Показать список заявок пользователя"""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
     requests = await request_service.get_user_requests(
         session=db_session,
+        tenant_id=tenant_id,
         user_id=user_id,
         limit=10  # Последние 10 заявок
     )
@@ -57,17 +58,17 @@ async def show_my_requests(message: Message, user_id: int, db_session):
 # ==================== ПРОСМОТР ДЕТАЛЕЙ ЗАЯВКИ ====================
 
 @router.callback_query(F.data.startswith("view_request_"))
-async def view_request_details(callback: CallbackQuery, user_id: int, db_session):
+async def view_request_details(callback: CallbackQuery, user_id: int, tenant_id: int, db_session):
     """Просмотр деталей заявки"""
     request_id = int(callback.data.split("_")[-1])
     
-    request = await request_service.get_request_by_id(db_session, request_id)
+    request = await request_service.get_request_by_id(db_session, tenant_id=tenant_id, request_id=request_id)
     
     if not request:
         await callback.answer("Заявка не найдена", show_alert=True)
         return
     
-    # Проверяем, что заявка принадлежит пользователю (для сотрудников)
+    # Проверяем, что заявка принадлежит пользователю (роль "пользователь")
     if request.user_id != user_id:
         await callback.answer("У вас нет доступа к этой заявке", show_alert=True)
         return
@@ -102,48 +103,51 @@ async def view_request_details(callback: CallbackQuery, user_id: int, db_session
     await callback.answer()
 
 
-# ==================== СВЯЗАТЬСЯ С ЗАВХОЗОМ ====================
+# ==================== СВЯЗАТЬСЯ С ТЕХНИКОМ ====================
 
-@router.message(F.text == "Связаться с завхозом")
+@router.message(F.text == "Связаться с техником")
 async def start_contact_warehouseman(message: Message, state: FSMContext):
-    """Начало отправки сообщения завхозу"""
+    """Начало отправки сообщения технику"""
     from bot.states.contact_warehouseman import ContactWarehousemanStates
     
     await state.set_state(ContactWarehousemanStates.waiting_for_message)
     
     await message.answer(
-        "💬 <b>Связаться с завхозом</b>\n\n"
-        "Напишите ваше сообщение завхозу:",
+        "💬 <b>Связаться с техником</b>\n\n"
+        "Напишите ваше сообщение технику:",
         reply_markup=get_cancel_keyboard(),
         parse_mode="HTML"
     )
 
 
 @router.message(ContactWarehousemanStates.waiting_for_message)
-async def send_message_to_warehouseman(message: Message, state: FSMContext, user_id: int, telegram_user, bot):
-    """Отправка сообщения завхозу"""
+async def send_message_to_warehouseman(message: Message, state: FSMContext, user_id: int, telegram_user, bot, base_role: str):
+    """Отправка сообщения технику"""
     from bot.states.contact_warehouseman import ContactWarehousemanStates
     from bot.config import get_config
     
     config = get_config()
-    user_name = telegram_user.first_name or "Сотрудник"
+    user_name = telegram_user.first_name or "Пользователь"
     user_username = f"@{telegram_user.username}" if telegram_user.username else f"ID: {user_id}"
     
-    # Формируем сообщение для завхоза
-    text = f"💬 <b>Сообщение от сотрудника</b>\n\n"
+    # Формируем сообщение для техника
+    text = f"💬 <b>Сообщение от пользователя</b>\n\n"
     text += f"👤 <b>От:</b> {user_name} ({user_username})\n"
     text += f"💬 <b>Сообщение:</b>\n{message.text}"
     
     try:
+        # В demo режиме отправляем сообщение "технику" самому пользователю,
+        # чтобы тестировщик не писал реальному технику.
+        target_chat_id = user_id if config.demo_mode else config.warehouseman_id
         await bot.send_message(
-            chat_id=config.warehouseman_id,
+            chat_id=target_chat_id,
             text=text,
             parse_mode="HTML"
         )
         
         await message.answer(
-            "✅ Сообщение отправлено завхозу!",
-            reply_markup=get_employee_keyboard()
+            "✅ Сообщение отправлено технику!",
+            reply_markup=get_employee_keyboard(is_manager=(base_role == "manager"))
         )
         
         await state.clear()
@@ -151,7 +155,7 @@ async def send_message_to_warehouseman(message: Message, state: FSMContext, user
         await message.answer(
             f"❌ Ошибка при отправке сообщения: {e}\n"
             "Попробуйте позже или обратитесь к руководителю.",
-            reply_markup=get_employee_keyboard()
+            reply_markup=get_employee_keyboard(is_manager=(base_role == "manager"))
         )
         await state.clear()
 
@@ -159,8 +163,8 @@ async def send_message_to_warehouseman(message: Message, state: FSMContext, user
 # ==================== ОТМЕНА ОТПРАВКИ СООБЩЕНИЯ ====================
 
 @router.callback_query(F.data == "cancel")
-async def cancel_message_to_warehouseman(callback: CallbackQuery, state: FSMContext):
-    """Отмена отправки сообщения завхозу"""
+async def cancel_message_to_warehouseman(callback: CallbackQuery, state: FSMContext, base_role: str):
+    """Отмена отправки сообщения технику"""
     from bot.keyboards.employee import get_employee_keyboard
     
     await state.clear()
@@ -168,7 +172,7 @@ async def cancel_message_to_warehouseman(callback: CallbackQuery, state: FSMCont
     await callback.message.edit_text("❌ Отправка сообщения отменена.")
     await callback.message.answer(
         "Выберите действие:",
-        reply_markup=get_employee_keyboard()
+        reply_markup=get_employee_keyboard(is_manager=(base_role == "manager"))
     )
     
     await callback.answer("Отменено")

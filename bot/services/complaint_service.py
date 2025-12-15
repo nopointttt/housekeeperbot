@@ -15,6 +15,7 @@ class ComplaintService:
     async def create_complaint(
         self,
         session: AsyncSession,
+        tenant_id: int,
         user_id: int,
         request_id: int,
         reason: str,
@@ -34,6 +35,7 @@ class ComplaintService:
             Созданная жалоба
         """
         complaint = Complaint(
+            tenant_id=tenant_id,
             user_id=user_id,
             request_id=request_id,
             reason=reason,
@@ -57,12 +59,14 @@ class ComplaintService:
     async def get_complaint_by_id(
         self,
         session: AsyncSession,
+        tenant_id: int,
         complaint_id: int
     ) -> Optional[Complaint]:
         """Получить жалобу по ID"""
         result = await session.execute(
             select(Complaint)
             .where(Complaint.id == complaint_id)
+            .where(Complaint.tenant_id == tenant_id)
             .options(selectinload(Complaint.user), selectinload(Complaint.request))
         )
         return result.scalar_one_or_none()
@@ -70,11 +74,13 @@ class ComplaintService:
     async def get_complaints_by_request(
         self,
         session: AsyncSession,
+        tenant_id: int,
         request_id: int
     ) -> list[Complaint]:
         """Получить все жалобы по заявке"""
         result = await session.execute(
             select(Complaint)
+            .where(Complaint.tenant_id == tenant_id)
             .where(Complaint.request_id == request_id)
             .options(selectinload(Complaint.user))
             .order_by(Complaint.created_at.desc())
